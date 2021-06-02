@@ -75,9 +75,15 @@
 
 typedef union
 {
-  byte array[4];
-  float value;
-} ByteToFl;
+  int16_t signed16;
+  uint16_t unsigned16;
+} scd4x_signedUnsigned16_t; // Avoid any ambiguity casting int16_t to uint16_t
+
+typedef union
+{
+  uint16_t unsigned16;
+  uint8_t bytes[2];
+} scd4x_unsigned16Bytes_t; // Make it easy to convert 2 x uint8_t to uint16_t
 
 enum
 {
@@ -99,22 +105,25 @@ public:
 
   void enableDebugging(Stream &debugPort = Serial); //Turn on debug printing. If user doesn't specify then Serial will be used.
 
-  bool startPeriodicMeasurement(void);
+  bool startPeriodicMeasurement(void); //Signal update interval is 5 seconds
+  bool stopPeriodicMeasurement(void); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+
   bool readMeasurement(void);
-  bool stopPeriodicMeasurement(void);
+  bool dataAvailable(void);
+
+  uint16_t getCO2(void);
+  float getHumidity(void);
+  float getTemperature(void);
 
   bool setTemperatureOffset(float tempOffset);
-  float getTemperatureOffset(void);
-  bool getTemperatureOffset(float *offset);
+  float getTemperatureOffset(void); // Will return zero if offset is invalid
+  bool getTemperatureOffset(float *offset); // Returns true if offset is valid
 
   bool getForcedRecalibration(uint16_t *val) { return (getSettingValue(COMMAND_SET_FORCED_RECALIBRATION_FACTOR, val)); }
   bool getMeasurementInterval(uint16_t *val) { return (getSettingValue(COMMAND_SET_MEASUREMENT_INTERVAL, val)); }
   bool getAltitudeCompensation(uint16_t *val) { return (getSettingValue(COMMAND_SET_ALTITUDE_COMPENSATION, val)); }
   bool getFirmwareVersion(uint16_t *val) { return (getSettingValue(COMMAND_READ_FW_VER, val)); }
 
-  uint16_t getCO2(void);
-  float getHumidity(void);
-  float getTemperature(void);
   uint16_t getAltitudeCompensation(void);
 
   bool setMeasurementInterval(uint16_t interval);
@@ -123,9 +132,6 @@ public:
   bool setAutoSelfCalibration(bool enable);
   bool setForcedRecalibrationFactor(uint16_t concentration);
   bool getAutoSelfCalibration(void);
-
-  bool dataAvailable();
-  bool readMeasurement();
 
   void reset();
 

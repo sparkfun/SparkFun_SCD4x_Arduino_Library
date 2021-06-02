@@ -87,6 +87,138 @@ void SCD30::enableDebugging(Stream &debugPort)
   _printDebug = true;
 }
 
+//Start periodic measurements. See 3.5.1
+bool SCD4x::startPeriodicMeasurement(void)
+{
+  return sendCommand(SCD4x_COMMAND_START_PERIODIC_MEASUREMENT);
+}
+
+//Stop periodic measurements. See 3.5.3
+//Note that the sensor will only respond to other commands after waiting 500 ms
+//after issuing the stop_periodic_measurement command.
+bool SCD4x::stopPeriodicMeasurement(void)
+{
+  bool success = sendCommand(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT);
+  delay(500);
+  return (success);
+}
+
+//Get 9 bytes from SCD4x. See 3.5.2
+//Updates global variables with floats
+//Returns true if success
+bool SCD4x::readMeasurement(void)
+{
+  //Verify we have data from the sensor
+  if (dataAvailable() == false)
+    return (false);
+
+  scd4x_unsigned16Bytes_t tempCO2;
+  tempCO2.unsigned16 = 0;
+  scd4x_unsigned16Bytes_t  tempHumidity;
+  tempHumidity.unsigned16 = 0;
+  scd4x_unsigned16Bytes_t  tempTemperature;
+  tempTemperature.unsigned16 = 0;
+
+  _i2cPort->beginTransmission(SCD4x_ADDRESS);
+  _i2cPort->write(SCD4x_COMMAND_READ_MEASUREMENT >> 8);   //MSB
+  _i2cPort->write(SCD4x_COMMAND_READ_MEASUREMENT & 0xFF); //LSB
+  if (_i2cPort->endTransmission() != 0)
+    return (false); //Sensor did not ACK
+
+  delay(1);
+
+  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
+  bool error = false;
+  if (_i2cPort->available())
+  {
+    byte bytesToCrc[2];
+    for (byte x = 0; x < 9; x++)
+    {
+      byte incoming = _i2cPort->read();
+
+      switch (x)
+      {
+      case 0:
+      case 1:
+        tempCO2.bytes[x == 0 ? 1 : 0] = incoming;
+        bytesToCrc[x] = incoming;
+        break;
+      case 3:
+      case 4:
+        tempTemperature.bytes[x == 3 ? 1 : 0] = incoming;
+        bytesToCrc[x % 2] = incoming;
+        break;
+      case 6:
+      case 7:
+        tempHumidity.bytes[x == 6 ? 1 : 0] = incoming;
+        bytesToCrc[x % 2] = incoming;
+        break;
+      default:
+        //Validate CRC
+        uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
+        if (foundCrc != incoming)
+        {
+          if (_printDebug == true)
+          {
+            _debugPort->print(F("SCD4x::readMeasurement: found CRC in byte "));
+            _debugPort->print(x);
+            _debugPort->print(F(", expected 0x"));
+            _debugPort->print(foundCrc, HEX);
+            _debugPort->print(F(", got 0x"));
+            _debugPort->println(incoming, HEX);
+          }
+          error = true;
+        }
+        break;
+      }
+    }
+  }
+  else
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->print(F("SCD4x::readMeasurement: no SCD4x data found from I2C, I2C claims we should receive "));
+      _debugPort->print(receivedBytes);
+      _debugPort->println(F(" bytes"));
+    }
+    return (false);
+  }
+
+  if (error)
+  {
+    if (_printDebug == true)
+      _debugPort->println(F("SCD4x::readMeasurement: encountered error reading SCD4x data."));
+    return (false);
+  }
+  //Now copy the int16s into their associated floats
+  co2 = (float)tempCO2.unsigned16;
+  temperature = -45 + (((float)tempTemperature.unsigned16) * 175 / 65536);
+  humidity = ((float)tempHumidity.unsigned16) * 100 / 65536;
+
+  //Mark our global variables as fresh
+  co2HasBeenReported = false;
+  humidityHasBeenReported = false;
+  temperatureHasBeenReported = false;
+
+  return (true); //Success! New data available in globals.
+}
+
+//Returns true when data is available
+bool SCD4x::dataAvailable(void)
+{
+  uint16_t response;
+  bool success = readRegister(SCD4x_COMMAND_GET_DATA_READY_STATUS, &response, 1);
+
+  if (success == false)
+    return (false);
+
+  //If the least significant 11 bits of word[0] are 0 → data not ready
+  //else → data ready for read-out
+  if ((response & 0x07ff) == 0x0000)
+    return (false);
+  return (true);
+}
+
 //Returns the latest available CO2 level
 //If the current level has already been reported, trigger a new read
 uint16_t SCD30::getCO2(void)
@@ -143,6 +275,14 @@ bool SCD30::setForcedRecalibrationFactor(uint16_t concentration)
   return sendCommand(COMMAND_SET_FORCED_RECALIBRATION_FACTOR, concentration);
 }
 
+//Set the temperature offset. See 3.6.1
+bool SCD4x::setTemperatureOffset(float tempOffset)
+{
+  scd4x_signedUnsigned16_t  signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
+  signedUnsigned.signed16 = tempOffset * 65536 / 175; // Toffset [°C] * 2^16 / 175
+  return sendCommand(SCD4x_COMMAND_SET_TEMPERATURE_OFFSET, signedUnsigned.unsigned16);
+}
+
 //Get the temperature offset. See 3.6.2
 float SCD4x::getTemperatureOffset(void)
 {
@@ -158,27 +298,11 @@ float SCD4x::getTemperatureOffset(void)
 //Get the temperature offset. See 3.6.2
 bool SCD4x::getTemperatureOffset(float *offset)
 {
-  union
-  {
-    int16_t signed16;
-    uint16_t unsigned16;
-  } signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
+  scd4x_signedUnsigned16_t signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
   signedUnsigned.unsigned16 = 0; // Return zero if readRegister fails
   bool success = readRegister(SCD4x_COMMAND_GET_TEMPERATURE_OFFSET, &signedUnsigned.unsigned16, 1);
   *offset = ((float)signedUnsigned.signed16) * 175.0 / 65535.0;
   return (success);
-}
-
-//Set the temperature offset. See 3.6.1
-bool SCD4x::setTemperatureOffset(float tempOffset)
-{
-  union
-  {
-    int16_t signed16;
-    uint16_t unsigned16;
-  } signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
-  signedUnsigned.signed16 = tempOffset * 65536 / 175; // Toffset [°C] * 2^16 / 175
-  return sendCommand(SCD4x_COMMAND_SET_TEMPERATURE_OFFSET, signedUnsigned.unsigned16);
 }
 
 //Get the altitude compenstation. See 1.3.9.
@@ -253,120 +377,36 @@ bool SCD30::setMeasurementInterval(uint16_t interval)
   return sendCommand(COMMAND_SET_MEASUREMENT_INTERVAL, interval);
 }
 
-//Returns true when data is available
-bool SCD30::dataAvailable()
+//Sends a command along with arguments and CRC
+bool SCD4x::sendCommand(uint16_t command, uint16_t arguments)
 {
-  uint16_t response = readRegister(COMMAND_GET_DATA_READY);
+  uint8_t data[2];
+  data[0] = arguments >> 8;
+  data[1] = arguments & 0xFF;
+  uint8_t crc = computeCRC8(data, 2); //Calc CRC on the arguments only, not the command
 
-  if (response == 1)
-    return (true);
-  return (false);
+  _i2cPort->beginTransmission(SCD4x_ADDRESS);
+  _i2cPort->write(command >> 8);     //MSB
+  _i2cPort->write(command & 0xFF);   //LSB
+  _i2cPort->write(arguments >> 8);   //MSB
+  _i2cPort->write(arguments & 0xFF); //LSB
+  _i2cPort->write(crc);
+  if (_i2cPort->endTransmission() != 0)
+    return (false); //Sensor did not ACK
+
+  return (true);
 }
 
-//Get 18 bytes from SCD30
-//Updates global variables with floats
-//Returns true if success
-bool SCD30::readMeasurement()
+//Sends just a command, no arguments, no CRC
+bool SCD4x::sendCommand(uint16_t command)
 {
-  //Verify we have data from the sensor
-  if (dataAvailable() == false)
-    return (false);
-
-  ByteToFl tempCO2;
-  tempCO2.value = 0;
-  ByteToFl tempHumidity;
-  tempHumidity.value = 0;
-  ByteToFl tempTemperature;
-  tempTemperature.value = 0;
-
   _i2cPort->beginTransmission(SCD30_ADDRESS);
-  _i2cPort->write(COMMAND_READ_MEASUREMENT >> 8);   //MSB
-  _i2cPort->write(COMMAND_READ_MEASUREMENT & 0xFF); //LSB
+  _i2cPort->write(command >> 8);   //MSB
+  _i2cPort->write(command & 0xFF); //LSB
   if (_i2cPort->endTransmission() != 0)
-    return (0); //Sensor did not ACK
+    return (false); //Sensor did not ACK
 
-  delay(3);
-
-  const uint8_t receivedBytes = _i2cPort->requestFrom((uint8_t)SCD30_ADDRESS, (uint8_t)18);
-  bool error = false;
-  if (_i2cPort->available())
-  {
-    byte bytesToCrc[2];
-    for (byte x = 0; x < 18; x++)
-    {
-      byte incoming = _i2cPort->read();
-
-      switch (x)
-      {
-      case 0:
-      case 1:
-      case 3:
-      case 4:
-        tempCO2.array[x < 3 ? 3 - x : 4 - x] = incoming;
-        bytesToCrc[x % 3] = incoming;
-        break;
-      case 6:
-      case 7:
-      case 9:
-      case 10:
-        tempTemperature.array[x < 9 ? 9 - x : 10 - x] = incoming;
-        bytesToCrc[x % 3] = incoming;
-        break;
-      case 12:
-      case 13:
-      case 15:
-      case 16:
-        tempHumidity.array[x < 15 ? 15 - x : 16 - x] = incoming;
-        bytesToCrc[x % 3] = incoming;
-        break;
-      default:
-        //Validate CRC
-        uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
-        if (foundCrc != incoming)
-        {
-          if (_printDebug == true)
-          {
-            _debugPort->print(F("readMeasurement: found CRC in byte "));
-            _debugPort->print(x);
-            _debugPort->print(F(", expected 0x"));
-            _debugPort->print(foundCrc, HEX);
-            _debugPort->print(F(", got 0x"));
-            _debugPort->println(incoming, HEX);
-          }
-          error = true;
-        }
-        break;
-      }
-    }
-  }
-  else
-  {
-    if (_printDebug == true)
-    {
-      _debugPort->print(F("readMeasurement: no SCD30 data found from I2C, i2c claims we should receive "));
-      _debugPort->print(receivedBytes);
-      _debugPort->println(F(" bytes"));
-    }
-    return false;
-  }
-
-  if (error)
-  {
-    if (_printDebug == true)
-      _debugPort->println(F("readMeasurement: encountered error reading SCD30 data."));
-    return false;
-  }
-  //Now copy the uint32s into their associated floats
-  co2 = tempCO2.value;
-  temperature = tempTemperature.value;
-  humidity = tempHumidity.value;
-
-  //Mark our global variables as fresh
-  co2HasBeenReported = false;
-  humidityHasBeenReported = false;
-  temperatureHasBeenReported = false;
-
-  return (true); //Success! New data available in globals.
+  return (true);
 }
 
 //Gets two bytes from SCD4x plus CRC.
@@ -401,38 +441,6 @@ bool SCD4x::readRegister(uint16_t registerAddress, uint16_t *response, uint16_t 
     }
   }
   return (false);
-}
-
-//Sends a command along with arguments and CRC
-bool SCD4x::sendCommand(uint16_t command, uint16_t arguments)
-{
-  uint8_t data[2];
-  data[0] = arguments >> 8;
-  data[1] = arguments & 0xFF;
-  uint8_t crc = computeCRC8(data, 2); //Calc CRC on the arguments only, not the command
-
-  _i2cPort->beginTransmission(SCD4x_ADDRESS);
-  _i2cPort->write(command >> 8);     //MSB
-  _i2cPort->write(command & 0xFF);   //LSB
-  _i2cPort->write(arguments >> 8);   //MSB
-  _i2cPort->write(arguments & 0xFF); //LSB
-  _i2cPort->write(crc);
-  if (_i2cPort->endTransmission() != 0)
-    return (false); //Sensor did not ACK
-
-  return (true);
-}
-
-//Sends just a command, no arguments, no CRC
-bool SCD4x::sendCommand(uint16_t command)
-{
-  _i2cPort->beginTransmission(SCD30_ADDRESS);
-  _i2cPort->write(command >> 8);   //MSB
-  _i2cPort->write(command & 0xFF); //LSB
-  if (_i2cPort->endTransmission() != 0)
-    return (false); //Sensor did not ACK
-
-  return (true);
 }
 
 //Given an array and a number of bytes, this calculate CRC8 for those bytes
