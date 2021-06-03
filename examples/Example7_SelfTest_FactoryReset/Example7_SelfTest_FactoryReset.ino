@@ -1,5 +1,5 @@
 /*
-  Reading CO2, humidity and temperature from the SCD4x
+  Self Test and Factory Reset
   By: Paul Clark
   Based on earlier code by: Nathan Seidle
   SparkFun Electronics
@@ -31,7 +31,6 @@ void setup()
 
   mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
-  //.begin will start periodic measurements for us (see the later examples for details on how to overrride this)
   if (mySensor.begin() == false)
   {
     Serial.println(F("Sensor not detected. Please check wiring. Freezing..."));
@@ -39,28 +38,35 @@ void setup()
       ;
   }
 
-  //The SCD4x has data ready every five seconds
+  //We need to stop periodic measurements before we can run the self test
+  if (mySensor.stopPeriodicMeasurement() == true)
+  {
+    Serial.println(F("Periodic measurement is disabled!"));
+  }  
+
+  //Now we can run the self test:
+  Serial.print(F("Starting the self-test. This will take 10 seconds to complete..."));
+
+  bool success = mySensor.performSelfTest();
+
+  Serial.print(F("The self test "));
+  if (success == false)
+    Serial.print(F("not "));
+  Serial.println(F("successful"));
+
+  //We can do a factory reset if we want to completely reset the sensor
+  Serial.print(F("Starting the factory reset. This will take 1200ms seconds to complete..."));
+
+  success = mySensor.performFactoryReset();
+
+  Serial.print(F("The factory reset was "));
+  if (success == false)
+    Serial.print(F("not "));
+  Serial.println(F("successful"));
+
 }
 
 void loop()
 {
-  if (mySensor.readMeasurement()) // readMeasurement will return true when fresh data is available
-  {
-    Serial.println();
-
-    Serial.print(F("CO2(ppm):"));
-    Serial.print(mySensor.getCO2());
-
-    Serial.print(F("\tTemperature(C):"));
-    Serial.print(mySensor.getTemperature(), 1);
-
-    Serial.print(F("\tHumidity(%RH):"));
-    Serial.print(mySensor.getHumidity(), 1);
-
-    Serial.println();
-  }
-  else
-    Serial.print(F("."));
-
-  delay(500);
+  // Nothing to do here
 }

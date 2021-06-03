@@ -1,5 +1,5 @@
 /*
-  Reading CO2, humidity and temperature from the SCD4x
+  Disable Auto Calibration
   By: Paul Clark
   Based on earlier code by: Nathan Seidle
   SparkFun Electronics
@@ -31,15 +31,27 @@ void setup()
 
   mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
-  //.begin will start periodic measurements for us (see the later examples for details on how to overrride this)
-  if (mySensor.begin() == false)
+  //.begin has three boolean parameters:
+  //  measBegin: set to true to begin periodic measurements automatically;
+  //             set to false to leave periodic measurements disabled.
+  //             Default is true.
+  //  autoCalibrate: set to true to leave automatic calibration enabled;
+  //                 set to false to disable automatic calibration.
+  //                 Default is true.
+  //  skipStopPeriodicMeasurements: set to true to make .begin skip the initial call of stopPeriodicMeasurement;
+  //                                set to false to make .begin stop periodic measurements before doing anything else.
+  //                                Default is false.
+  //Please see the next example for a full description of skipStopPeriodicMeasurements
+
+  //In this example, we call .begin and set autoCalibrate to false to disable automatic calibration
+  if (mySensor.begin(true, false) == false)
+  //measBegin_________/     |
+  //autoCalibrate__________/
   {
-    Serial.println(F("Sensor not detected. Please check wiring. Freezing..."));
+    Serial.println(F("Sensor did not begin correctly. Please check wiring. Freezing..."));
     while (1)
       ;
   }
-
-  //The SCD4x has data ready every five seconds
 }
 
 void loop()

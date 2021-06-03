@@ -1,5 +1,5 @@
 /*
-  Reading CO2, humidity and temperature from the SCD4x
+  Reading CO2, humidity and temperature from the SCD4x in Low Power mode
   By: Paul Clark
   Based on earlier code by: Nathan Seidle
   SparkFun Electronics
@@ -39,7 +39,26 @@ void setup()
       ;
   }
 
-  //The SCD4x has data ready every five seconds
+  //By default, the SCD4x has data ready every five seconds.
+  //We can enable low power operation and receive a reading every ~30 seconds
+
+  //But first, we need to stop periodic measurements otherwise startLowPowerPeriodicMeasurement will fail
+  if (mySensor.stopPeriodicMeasurement() == true)
+  {
+    Serial.println(F("Periodic measurement is disabled!"));
+  }  
+
+  //Now we can enable low power periodic measurements
+  if (mySensor.startLowPowerPeriodicMeasurement() == true)
+  {
+    Serial.println(F("Low power mode enabled!"));
+  }
+
+  //Finally, we need to restart periodic measurements
+  if (mySensor.startPeriodicMeasurement() == true)
+  {
+    Serial.println(F("Periodic measurements restarted!"));
+  }
 }
 
 void loop()
@@ -62,5 +81,5 @@ void loop()
   else
     Serial.print(F("."));
 
-  delay(500);
+  delay(1000);
 }

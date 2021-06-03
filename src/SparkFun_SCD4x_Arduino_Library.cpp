@@ -854,7 +854,7 @@ bool SCD4x::measureSingleShot(void)
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShot: _sensorType is not SCD4x_SENSOR_SCD41"));
-      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x(SCD4x_SENSOR_SCD41)"));
+      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x mySensor(SCD4x_SENSOR_SCD41)"));
     }
     return(false);
   }
@@ -888,7 +888,7 @@ bool SCD4x::measureSingleShotRHTOnly(void)
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShotRHTOnly: _sensorType is not SCD4x_SENSOR_SCD41"));
-      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x(SCD4x_SENSOR_SCD41)"));
+      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x mySensor(SCD4x_SENSOR_SCD41)"));
     }
     return(false);
   }

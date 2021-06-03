@@ -1,5 +1,5 @@
 /*
-  Reading CO2, humidity and temperature from the SCD4x
+  Alternate Wire Port
   By: Paul Clark
   Based on earlier code by: Nathan Seidle
   SparkFun Electronics
@@ -27,19 +27,19 @@ void setup()
 {
   Serial.begin(115200);
   Serial.println(F("SCD4x Example"));
-  Wire.begin();
+  
+  Wire1.begin(); // In this example, let's use Wire1 instead of Wire
 
   mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  
+  //mySensor.enableDebugging(Serial1); // Uncomment this line instead to get helpful debug messages on Serial1
 
-  //.begin will start periodic measurements for us (see the later examples for details on how to overrride this)
-  if (mySensor.begin() == false)
+  if (mySensor.begin(Wire1) == false) // .begin the sensor on Wire1 instead of Wire
   {
     Serial.println(F("Sensor not detected. Please check wiring. Freezing..."));
     while (1)
       ;
   }
-
-  //The SCD4x has data ready every five seconds
 }
 
 void loop()
