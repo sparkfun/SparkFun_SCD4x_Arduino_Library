@@ -1,55 +1,58 @@
 /*
-  Reading CO2, humidity and temperature from the SCD30
-  By: Nathan Seidle
+  Reading CO2, humidity and temperature from the SCD4x
+  By: Paul Clark
+  Based on earlier code by: Nathan Seidle
   SparkFun Electronics
-  Date: May 22nd, 2018
+  Date: June 3rd, 2021
   License: MIT. See license file for more information but you can
   basically do whatever you want with this code.
 
   Feel like supporting open source hardware?
-  Buy a board from SparkFun! https://www.sparkfun.com/products/15112
+  Buy a board from SparkFun! https://www.sparkfun.com/products/nnnnn
 
   This example prints the current CO2 level, relative humidity, and temperature in C.
 
   Hardware Connections:
   Attach RedBoard to computer using a USB cable.
-  Connect SCD30 to RedBoard using Qwiic cable.
+  Connect SCD40/41 to RedBoard using Qwiic cable.
   Open Serial Monitor at 115200 baud.
 */
 
 #include <Wire.h>
 
-#include "SparkFun_SCD30_Arduino_Library.h" //Click here to get the library: http://librarymanager/All#SparkFun_SCD30
-SCD30 airSensor;
+#include "SparkFun_SCD4x_Arduino_Library.h" //Click here to get the library: http://librarymanager/All#SparkFun_SCD4x
+SCD4x mySensor;
 
 void setup()
 {
   Serial.begin(115200);
-  Serial.println("SCD30 Example");
+  Serial.println("SCD4x Example");
   Wire.begin();
 
-  if (airSensor.begin() == false)
+  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+
+  if (mySensor.begin() == false)
   {
-    Serial.println("Air sensor not detected. Please check wiring. Freezing...");
+    Serial.println("Sensor not detected. Please check wiring. Freezing...");
     while (1)
       ;
   }
 
-  //The SCD30 has data ready every two seconds
+  //The SCD4x has data ready every five seconds
 }
 
 void loop()
 {
-  if (airSensor.dataAvailable())
+  if (mySensor.getDataReadyStatus())
   {
-    Serial.print("co2(ppm):");
-    Serial.print(airSensor.getCO2());
+    Serial.print("CO2(ppm):");
+    Serial.print(mySensor.getCO2());
 
-    Serial.print(" temp(C):");
-    Serial.print(airSensor.getTemperature(), 1);
+    Serial.print("\tTemperature(C):");
+    Serial.print(mySensor.getTemperature(), 1);
 
-    Serial.print(" humidity(%):");
-    Serial.print(airSensor.getHumidity(), 1);
+    Serial.print("\tHumidity(%RH):");
+    Serial.print(mySensor.getHumidity(), 1);
 
     Serial.println();
   }

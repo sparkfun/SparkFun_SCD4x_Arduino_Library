@@ -85,7 +85,7 @@ typedef union
   uint8_t bytes[2];
 } scd4x_unsigned16Bytes_t; // Make it easy to convert 2 x uint8_t to uint16_t
 
-enum
+typedef enum
 {
   SCD4x_SENSOR_SCD40 = 0,
   SCD4x_SENSOR_SCD41
@@ -96,44 +96,58 @@ class SCD4x
 public:
   SCD4x(scd4x_sensor_type_e sensorType = SCD4x_SENSOR_SCD40);
 
-  bool begin(bool autoCalibrate) { return begin(Wire, autoCalibrate); }
+  bool begin(bool measBegin) { return begin(Wire, measBegin); }
+  bool begin(bool measBegin, bool autoCalibrate) { return begin(Wire, measBegin, autoCalibrate); }
+  bool begin(bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements) { return begin(Wire, measBegin, autoCalibrate, skipStopPeriodicMeasurements); }
 #ifdef USE_TEENSY3_I2C_LIB
-  bool begin(i2c_t3 &wirePort = Wire, bool autoCalibrate = false, bool measBegin = true); //By default use Wire port
+  bool begin(i2c_t3 &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false); //By default use Wire port
 #else
-  bool begin(TwoWire &wirePort = Wire, bool autoCalibrate = false, bool measBegin = true); //By default use Wire port
+  bool begin(TwoWire &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false); //By default use Wire port
 #endif
 
   void enableDebugging(Stream &debugPort = Serial); //Turn on debug printing. If user doesn't specify then Serial will be used.
 
   bool startPeriodicMeasurement(void); //Signal update interval is 5 seconds
-  bool stopPeriodicMeasurement(void); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+  // stopPeriodicMeasurement can be called before .begin if required
+  // If the sensor has been begun (_i2cPort is not NULL) then _i2cPort is used
+  // If the sensor has not been begun (_i2cPort is NULL) then wirePort and address are used (which will default to Wire)
+#ifdef USE_TEENSY3_I2C_LIB
+  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, i2c_t3 &wirePort = Wire); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+#else
+  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, TwoWire &wirePort = Wire); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+#endif
 
   bool readMeasurement(void);
-  bool dataAvailable(void);
 
   uint16_t getCO2(void);
   float getHumidity(void);
   float getTemperature(void);
 
-  bool setTemperatureOffset(float tempOffset);
+  bool setTemperatureOffset(float offset, uint16_t delayMillis = 1);
   float getTemperatureOffset(void); // Will return zero if offset is invalid
   bool getTemperatureOffset(float *offset); // Returns true if offset is valid
+  bool setSensorAltitude(uint16_t altitude, uint16_t delayMillis = 1);
+  uint16_t getSensorAltitude(void); // Will return zero if offset is invalid
+  bool getSensorAltitude(uint16_t *altitude); // Returns true if offset is valid
+  bool setAmbientPressure(float pressure, uint16_t delayMillis = 1);
 
-  bool getForcedRecalibration(uint16_t *val) { return (getSettingValue(COMMAND_SET_FORCED_RECALIBRATION_FACTOR, val)); }
-  bool getMeasurementInterval(uint16_t *val) { return (getSettingValue(COMMAND_SET_MEASUREMENT_INTERVAL, val)); }
-  bool getAltitudeCompensation(uint16_t *val) { return (getSettingValue(COMMAND_SET_ALTITUDE_COMPENSATION, val)); }
-  bool getFirmwareVersion(uint16_t *val) { return (getSettingValue(COMMAND_READ_FW_VER, val)); }
+  float performForcedRecalibration(uint16_t concentration);
+  bool performForcedRecalibration(uint16_t concentration, float *correction); // Returns true if FRC is successful
+  bool setAutomaticSelfCalibrationEnabled(bool enabled = true, uint16_t delayMillis = 1);
+  bool getAutomaticSelfCalibrationEnabled(void);
+  bool getAutomaticSelfCalibrationEnabled(uint16_t *enabled);
 
-  uint16_t getAltitudeCompensation(void);
+  bool startLowPowerPeriodicMeasurement(void);
+  bool getDataReadyStatus(void);
 
-  bool setMeasurementInterval(uint16_t interval);
-  bool setAmbientPressure(uint16_t pressure_mbar);
-  bool setAltitudeCompensation(uint16_t altitude);
-  bool setAutoSelfCalibration(bool enable);
-  bool setForcedRecalibrationFactor(uint16_t concentration);
-  bool getAutoSelfCalibration(void);
+  bool persistSettings(uint16_t delayMillis = 800);
+  bool getSerialNumber(char *serialNumber); // Returns true if serial number is read correctly
+  bool performSelfTest(void);
+  bool performFactoryReset(uint16_t delayMillis = 1200);
+  bool reInit(uint16_t delayMillis = 20);
 
-  void reset();
+  bool measureSingleShot(void); // SCD41 only
+  bool measureSingleShotRHTOnly(void); // SCD41 only
 
   bool sendCommand(uint16_t command, uint16_t arguments);
   bool sendCommand(uint16_t command);
@@ -145,9 +159,9 @@ public:
 private:
   //Variables
 #ifdef USE_TEENSY3_I2C_LIB
-  i2c_t3 *_i2cPort; //The generic connection to user's chosen I2C hardware
+  i2c_t3 *_i2cPort = NULL; //The generic connection to user's chosen I2C hardware
 #else
-  TwoWire *_i2cPort;                                                                       //The generic connection to user's chosen I2C hardware
+  TwoWire *_i2cPort = NULL;                                                                       //The generic connection to user's chosen I2C hardware
 #endif
 
   //Sensor type
@@ -163,6 +177,12 @@ private:
   bool co2HasBeenReported = true;
   bool humidityHasBeenReported = true;
   bool temperatureHasBeenReported = true;
+
+  //Keep track of whether periodic measurements are in progress
+  bool periodicMeasurementsAreRunning = false;
+
+  //Convert serial number digit to ASCII
+  char convertHexToASCII(uint8_t digit);
 
   //Debug
   Stream *_debugPort;          //The stream to send debug messages to if enabled. Usually Serial.

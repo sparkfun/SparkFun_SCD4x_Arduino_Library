@@ -30,86 +30,132 @@ SCD4x::SCD4x(scd4x_sensor_type_e sensorType)
 
 //Initialize the Serial port
 #ifdef USE_TEENSY3_I2C_LIB
-bool SCD30::begin(i2c_t3 &wirePort, bool autoCalibrate, bool measBegin)
+bool SCD4x::begin(i2c_t3 &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements)
 #else
-bool SCD30::begin(TwoWire &wirePort, bool autoCalibrate, bool measBegin)
+bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements)
 #endif
 {
   _i2cPort = &wirePort; //Grab which port the user wants us to use
 
-  /* Especially during obtaining the ACK BIT after a byte sent the SCD30 is using clock stretching  (but NOT only there)!
-   * The need for clock stretching is described in the Sensirion_CO2_Sensors_SCD30_Interface_Description.pdf
-   *
-   * The default clock stretch (maximum wait time) on the ESP8266-library (2.4.2) is 230us which is set during _i2cPort->begin();
-   * In the current implementation of the ESP8266 I2C driver there is NO error message when this time expired, while
-   * the clock stretch is still happening, causing uncontrolled behaviour of the hardware combination.
-   *
-   * To set ClockStretchlimit() a check for ESP8266 boards has been added in the driver.
-   *
-   * With setting to 20000, we set a max timeout of 20mS (> 20x the maximum measured) basically disabling the time-out
-   * and now wait for clock stretch to be controlled by the client.
-   */
+  bool success = true;
 
-#if defined(ARDUINO_ARCH_ESP8266)
-  _i2cPort->setClockStretchLimit(200000);
-#endif
+  //If periodic measurements are already running, getSerialNumber will fail...
+  //To be safe, let's stop period measurements before we do anything else
+  //The user can override this by setting skipStopPeriodicMeasurements to true
+  if (skipStopPeriodicMeasurements == false)
+    success &= stopPeriodicMeasurement();
 
-  uint16_t fwVer;
-  if (getFirmwareVersion(&fwVer) == false) // Read the firmware version. Return false if the CRC check fails.
+  char serialNumber[13]; // Serial number is 12 digits plus trailing NULL
+  success &= getSerialNumber(serialNumber); // Read the serial number. Return false if the CRC check fails.
+  if (success == false)
     return (false);
 
   if (_printDebug == true)
   {
-    _debugPort->print(F("SCD30 begin: got firmware version 0x"));
-    _debugPort->println(fwVer, HEX);
+    _debugPort->print(F("SCD30::begin: got serial number 0x"));
+    _debugPort->println(serialNumber);
   }
 
-  if (measBegin == false) // Exit now if measBegin is false
-    return (true);
-
-  //Check for device to respond correctly
-  if (beginMeasuring() == true) //Start continuous measurements
+  if (autoCalibrate == true) // Must be done before periodic measurements are started
   {
-    setMeasurementInterval(2);             //2 seconds between measurements
-    setAutoSelfCalibration(autoCalibrate); //Enable auto-self-calibration
-
-    return (true);
+    success &= setAutomaticSelfCalibrationEnabled(true);
+    success &= (getAutomaticSelfCalibrationEnabled() == true);
+  }
+  else
+  {
+    success &= setAutomaticSelfCalibrationEnabled(false);
+    success &= (getAutomaticSelfCalibrationEnabled() == false);
   }
 
-  return (false); //Something went wrong
+  if (measBegin == true)
+  {
+    success &= startPeriodicMeasurement();
+  }
+
+  return (success);
 }
 
 //Calling this function with nothing sets the debug port to Serial
 //You can also call it with other streams like Serial1, SerialUSB, etc.
-void SCD30::enableDebugging(Stream &debugPort)
+void SCD4x::enableDebugging(Stream &debugPort)
 {
   _debugPort = &debugPort;
   _printDebug = true;
 }
 
 //Start periodic measurements. See 3.5.1
+//signal update interval is 5 seconds.
 bool SCD4x::startPeriodicMeasurement(void)
 {
-  return sendCommand(SCD4x_COMMAND_START_PERIODIC_MEASUREMENT);
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::startPeriodicMeasurement: periodic measurements are already running"));
+    }
+    return (true); //Maybe this should be false?
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_START_PERIODIC_MEASUREMENT);
+  if (success)
+    periodicMeasurementsAreRunning = true;
+  return (success);
 }
 
 //Stop periodic measurements. See 3.5.3
-//Note that the sensor will only respond to other commands after waiting 500 ms
-//after issuing the stop_periodic_measurement command.
-bool SCD4x::stopPeriodicMeasurement(void)
+//Stop periodic measurement to change the sensor configuration or to save power.
+//Note that the sensor will only respond to other commands after waiting 500 ms after issuing
+//the stop_periodic_measurement command.
+#ifdef USE_TEENSY3_I2C_LIB
+bool SCD4x::stopPeriodicMeasurement(uint16_t delayMillis, i2c_t3 &wirePort)
+#else
+bool SCD4x::stopPeriodicMeasurement(uint16_t delayMillis, TwoWire &wirePort)
+#endif
 {
-  bool success = sendCommand(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT);
-  delay(500);
-  return (success);
+  uint8_t i2cResult;
+  if (_i2cPort != NULL) // If the sensor has been begun (_i2cPort is not NULL) then _i2cPort is used
+  {
+    _i2cPort->beginTransmission(SCD4x_ADDRESS);
+    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT >> 8);   //MSB
+    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT & 0xFF); //LSB
+    i2cResult = _i2cPort->endTransmission();
+  }
+  else
+  {
+    // If the sensor has not been begun (_i2cPort is NULL) then wirePort is used (which will default to Wire)
+    _i2cPort->beginTransmission(SCD4x_ADDRESS);
+    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT >> 8);   //MSB
+    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT & 0xFF); //LSB
+    i2cResult = wirePort.endTransmission();
+  }
+
+  if (i2cResult == 0)
+  {
+    periodicMeasurementsAreRunning = false;
+    if (delayMillis > 0)
+      delay(delayMillis);
+    return(true);
+  }
+
+  if (_printDebug == true)
+  {
+    _debugPort->print(F("SCD4x::stopPeriodicMeasurement: I2C error: "));
+    _debugPort->println(i2cResult);
+  }
+  return (false);
 }
 
 //Get 9 bytes from SCD4x. See 3.5.2
 //Updates global variables with floats
-//Returns true if success
+//Returns true if data is read successfully
+//Read sensor output. The measurement data can only be read out once per signal update interval as the
+//buffer is emptied upon read-out. If no data is available in the buffer, the sensor returns a NACK.
+//To avoid a NACK response, the get_data_ready_status can be issued to check data status
+//(see chapter 3.8.2 for further details).
 bool SCD4x::readMeasurement(void)
 {
   //Verify we have data from the sensor
-  if (dataAvailable() == false)
+  if (getDataReadyStatus() == false)
     return (false);
 
   scd4x_unsigned16Bytes_t tempCO2;
@@ -125,7 +171,7 @@ bool SCD4x::readMeasurement(void)
   if (_i2cPort->endTransmission() != 0)
     return (false); //Sensor did not ACK
 
-  delay(1);
+  delay(1); //Datasheet specifies this
 
   uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
   bool error = false;
@@ -203,8 +249,388 @@ bool SCD4x::readMeasurement(void)
   return (true); //Success! New data available in globals.
 }
 
-//Returns true when data is available
-bool SCD4x::dataAvailable(void)
+//Returns the latest available CO2 level
+//If the current level has already been reported, trigger a new read
+uint16_t SCD4x::getCO2(void)
+{
+  if (co2HasBeenReported == true) //Trigger a new read
+    readMeasurement();            //Pull in new co2, humidity, and temp into global vars
+
+  co2HasBeenReported = true;
+
+  return (uint16_t)co2; //Cut off decimal as co2 is 0 to 10,000
+}
+
+//Returns the latest available humidity
+//If the current level has already been reported, trigger a new read
+float SCD4x::getHumidity(void)
+{
+  if (humidityHasBeenReported == true) //Trigger a new read
+    readMeasurement();                 //Pull in new co2, humidity, and temp into global vars
+
+  humidityHasBeenReported = true;
+
+  return humidity;
+}
+
+//Returns the latest available temperature
+//If the current level has already been reported, trigger a new read
+float SCD4x::getTemperature(void)
+{
+  if (temperatureHasBeenReported == true) //Trigger a new read
+    readMeasurement();                    //Pull in new co2, humidity, and temp into global vars
+
+  temperatureHasBeenReported = true;
+
+  return temperature;
+}
+
+//Set the temperature offset (C). See 3.6.1
+//Max command duration: 1ms
+//The user can set delayMillis to zero f they want the function to return immediately.
+//The temperature offset has no influence on the SCD4x CO2 accuracy.
+//Setting the temperature offset of the SCD4x inside the customer device correctly allows the user
+//to leverage the RH and T output signal.
+bool SCD4x::setTemperatureOffset(float offset, uint16_t delayMillis)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setTemperatureOffset: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  if (offset < 0)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setTemperatureOffset: offset must be >= 0C"));
+    }
+    return (false);
+  }
+  if (offset >= 175)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setTemperatureOffset: offset must be < 175C"));
+    }
+    return (false);
+  }
+  uint16_t offsetWord = (uint16_t)(offset * 65536 / 175); // Toffset [°C] * 2^16 / 175
+  bool success = sendCommand(SCD4x_COMMAND_SET_TEMPERATURE_OFFSET, offsetWord);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
+}
+
+//Get the temperature offset. See 3.6.2
+float SCD4x::getTemperatureOffset(void)
+{
+ if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getTemperatureOffset: periodic measurements are running. Returning 0.0"));
+    }
+    return (0.0);
+  }
+
+  float offset;
+  bool success = getTemperatureOffset(&offset);
+  if ((success == false) && (_printDebug == true))
+  {
+    _debugPort->println(F("SCD4x::getTemperatureOffset: failed to read offset. Returning 0.0"));
+  }
+  return (offset);
+}
+
+//Get the temperature offset. See 3.6.2
+bool SCD4x::getTemperatureOffset(float *offset)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getTemperatureOffset: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  uint16_t offsetWord = 0; // offset will be zero if readRegister fails
+  bool success = readRegister(SCD4x_COMMAND_GET_TEMPERATURE_OFFSET, &offsetWord, 1);
+  *offset = ((float)offsetWord) * 175.0 / 65535.0;
+  return (success);
+}
+
+//Set the sensor altitude (metres above sea level). See 3.6.3
+//Max command duration: 1ms
+//The user can set delayMillis to zero f they want the function to return immediately.
+//Reading and writing of the sensor altitude must be done while the SCD4x is in idle mode.
+//Typically, the sensor altitude is set once after device installation. To save the setting to the EEPROM,
+//the persist setting (see chapter 3.9.1) command must be issued.
+//Per default, the sensor altitude is set to 0 meter above sea-level.
+bool SCD4x::setSensorAltitude(uint16_t altitude, uint16_t delayMillis)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setSensorAltitude: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_SET_SENSOR_ALTITUDE, altitude);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
+}
+
+//Get the sensor altitude. See 3.6.4
+uint16_t SCD4x::getSensorAltitude(void)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getSensorAltitude: periodic measurements are running. Returning 0"));
+    }
+    return (0);
+  }
+
+  uint16_t altitude = 0;
+  bool success = getSensorAltitude(&altitude);
+  if ((success == false) && (_printDebug == true))
+  {
+    _debugPort->println(F("SCD4x::getSensorAltitude: failed to read altitude. Returning 0"));
+  }
+  return (altitude);
+}
+
+//Get the sensor altitude. See 3.6.4
+bool SCD4x::getSensorAltitude(uint16_t *altitude)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getSensorAltitude: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  return (readRegister(SCD4x_COMMAND_GET_SENSOR_ALTITUDE, altitude, 1));
+}
+
+//Set the ambient pressure (Pa). See 3.6.5
+//Max command duration: 1ms
+//The user can set delayMillis to zero f they want the function to return immediately.
+//The set_ambient_pressure command can be sent during periodic measurements to enable continuous pressure compensation.
+bool SCD4x::setAmbientPressure(float pressure, uint16_t delayMillis)
+{
+  if (pressure < 0)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setAmbientPressure: pressure must be >= 0 Pa"));
+    }
+    return (false);
+  }
+  if (pressure > 6553500)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setAmbientPressure: pressure must be <= 6553500 Pa"));
+    }
+    return (false);
+  }
+  uint16_t pressureWord = (uint16_t)(pressure / 100);
+  bool success = sendCommand(SCD4x_COMMAND_SET_AMBIENT_PRESSURE, pressureWord);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
+}
+
+//Perform forced recalibration. See 3.7.1
+float SCD4x::performForcedRecalibration(uint16_t concentration)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::performForcedRecalibration: periodic measurements are running. Returning 0.0"));
+    }
+    return (0.0);
+  }
+
+  float correction;
+  bool success = performForcedRecalibration(concentration, &correction);
+  if ((success == false) && (_printDebug == true))
+  {
+    _debugPort->println(F("SCD4x::performForcedRecalibration: FRC failed"));
+  }
+  return (correction);
+}
+
+//Perform forced recalibration. See 3.7.1
+//To successfully conduct an accurate forced recalibration, the following steps need to be carried out:
+//1. Operate the SCD4x in the operation mode later used in normal sensor operation (periodic measurement,
+//   low power periodic measurement or single shot) for > 3 minutes in an environment with homogenous and
+//   constant CO2 concentration.
+//2. Issue stop_periodic_measurement. Wait 500 ms for the stop command to complete.
+//3. Subsequently issue the perform_forced_recalibration command and optionally read out the FRC correction
+//   (i.e. the magnitude of the correction) after waiting for 400 ms for the command to complete.
+//A return value of 0xffff indicates that the forced recalibration has failed.
+bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::performForcedRecalibration: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  uint16_t correctionWord;
+
+  bool success = sendCommand(SCD4x_COMMAND_PERFORM_FORCED_CALIBRATION, concentration);
+
+  if (success == false)
+    return (false);
+
+  delay(400); //Datasheet specifies this
+
+  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)3);
+  bool error = false;
+  if (_i2cPort->available())
+  {
+    byte bytesToCrc[2];
+    bytesToCrc[0] = _i2cPort->read();
+    correctionWord = ((uint16_t)bytesToCrc[0]) << 8;
+    bytesToCrc[1] = _i2cPort->read();
+    correctionWord |= (uint16_t)bytesToCrc[1];
+    byte incomingCrc = _i2cPort->read();
+    uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
+    if (foundCrc != incomingCrc)
+    {
+      if (_printDebug == true)
+      {
+        _debugPort->print(F("SCD4x::performForcedRecalibration: CRC error. Expected 0x"));
+        _debugPort->print(foundCrc, HEX);
+        _debugPort->print(F(", got 0x"));
+        _debugPort->println(incomingCrc, HEX);
+      }
+      error = true;
+    }
+  }
+  else
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->print(F("SCD4x::performForcedRecalibration: no SCD4x data found from I2C, I2C claims we should receive "));
+      _debugPort->print(receivedBytes);
+      _debugPort->println(F(" bytes"));
+    }
+    return (false);
+  }
+
+  if (error)
+  {
+    if (_printDebug == true)
+      _debugPort->println(F("SCD4x::performForcedRecalibration: encountered error reading SCD4x data."));
+    return (false);
+  }
+
+  *correction = ((float)correctionWord) - 32768; // FRC correction [ppm CO2] = word[0] – 0x8000
+
+  if (correctionWord == 0xffff)
+    return (false);
+  
+  return (true);
+}
+
+//Enable/disable automatic self calibration. See 3.7.2
+//Set the current state (enabled / disabled) of the automatic self-calibration. By default, ASC is enabled.
+//To save the setting to the EEPROM, the persist_setting (see chapter 3.9.1) command must be issued.
+bool SCD4x::setAutomaticSelfCalibrationEnabled(bool enabled, uint16_t delayMillis)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::setAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  uint16_t enabledWord = enabled == true ? 0x0001 : 0x0000;
+  bool success = sendCommand(SCD4x_COMMAND_SET_AUTOMATIC_SELF_CALIBRATION_ENABLED, enabledWord);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
+}
+
+//Check if automatic self calibration is enabled. See 3.7.3
+bool SCD4x::getAutomaticSelfCalibrationEnabled(void)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  uint16_t enabled;
+  bool success = getAutomaticSelfCalibrationEnabled(&enabled);
+  if (success == false)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("getAutomaticSelfCalibrationEnabled: failed to get self calibration status. Returning false"));
+    }
+    return (false);
+  }
+  return (enabled == 0x0001);
+}
+
+//Check if automatic self calibration is enabled. See 3.7.3
+bool SCD4x::getAutomaticSelfCalibrationEnabled(uint16_t *enabled)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  return (readRegister(SCD4x_COMMAND_GET_AUTOMATIC_SELF_CALIBRATION_ENABLED, enabled, 1));
+}
+
+//Start low power periodic measurements. See 3.8.1
+//Signal update interval will be 30 seconds instead of 5
+bool SCD4x::startLowPowerPeriodicMeasurement(void)
+{
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::startLowPowerPeriodicMeasurement: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  return sendCommand(SCD4x_COMMAND_START_LOW_POWER_PERIODIC_MEASUREMENT);
+}
+
+//Returns true when data is available. See 3.8.2
+bool SCD4x::getDataReadyStatus(void)
 {
   uint16_t response;
   bool success = readRegister(SCD4x_COMMAND_GET_DATA_READY_STATUS, &response, 1);
@@ -219,162 +645,271 @@ bool SCD4x::dataAvailable(void)
   return (true);
 }
 
-//Returns the latest available CO2 level
-//If the current level has already been reported, trigger a new read
-uint16_t SCD30::getCO2(void)
+//Persist settings: copy settings (e.g. temperature offset) from RAM to EEPROM. See 3.9.1
+//Configuration settings such as the temperature offset, sensor altitude and the ASC enabled/disabled parameter
+//are by default stored in the volatile memory (RAM) only and will be lost after a power-cycle. The persist_settings
+//command stores the current configuration in the EEPROM of the SCD4x, making them persistent across power-cycling.
+//To avoid unnecessary wear of the EEPROM, the persist_settings command should only be sent when persistence is required
+//and if actual changes to the configuration have been made. The EEPROM is guaranteed to endure at least 2000 write
+//cycles before failure.
+bool SCD4x::persistSettings(uint16_t delayMillis)
 {
-  if (co2HasBeenReported == true) //Trigger a new read
-    readMeasurement();            //Pull in new co2, humidity, and temp into global vars
-
-  co2HasBeenReported = true;
-
-  return (uint16_t)co2; //Cut off decimal as co2 is 0 to 10,000
-}
-
-//Returns the latest available humidity
-//If the current level has already been reported, trigger a new read
-float SCD30::getHumidity(void)
-{
-  if (humidityHasBeenReported == true) //Trigger a new read
-    readMeasurement();                 //Pull in new co2, humidity, and temp into global vars
-
-  humidityHasBeenReported = true;
-
-  return humidity;
-}
-
-//Returns the latest available temperature
-//If the current level has already been reported, trigger a new read
-float SCD30::getTemperature(void)
-{
-  if (temperatureHasBeenReported == true) //Trigger a new read
-    readMeasurement();                    //Pull in new co2, humidity, and temp into global vars
-
-  temperatureHasBeenReported = true;
-
-  return temperature;
-}
-
-//Enables or disables the ASC
-bool SCD30::setAutoSelfCalibration(bool enable)
-{
-  if (enable)
-    return sendCommand(COMMAND_AUTOMATIC_SELF_CALIBRATION, 1); //Activate continuous ASC
-  else
-    return sendCommand(COMMAND_AUTOMATIC_SELF_CALIBRATION, 0); //Deactivate continuous ASC
-}
-
-//Set the forced recalibration factor. See 1.3.7.
-//The reference CO2 concentration has to be within the range 400 ppm ≤ cref(CO2) ≤ 2000 ppm.
-bool SCD30::setForcedRecalibrationFactor(uint16_t concentration)
-{
-  if (concentration < 400 || concentration > 2000)
+  if (periodicMeasurementsAreRunning)
   {
-    return false; //Error check.
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::persistSettings: periodic measurements are running. Aborting"));
+    }
+    return (false);
   }
-  return sendCommand(COMMAND_SET_FORCED_RECALIBRATION_FACTOR, concentration);
-}
 
-//Set the temperature offset. See 3.6.1
-bool SCD4x::setTemperatureOffset(float tempOffset)
-{
-  scd4x_signedUnsigned16_t  signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
-  signedUnsigned.signed16 = tempOffset * 65536 / 175; // Toffset [°C] * 2^16 / 175
-  return sendCommand(SCD4x_COMMAND_SET_TEMPERATURE_OFFSET, signedUnsigned.unsigned16);
-}
-
-//Get the temperature offset. See 3.6.2
-float SCD4x::getTemperatureOffset(void)
-{
-  float offset;
-  bool success = getTemperatureOffset(&offset);
-  if ((success == false) && (_printDebug == true))
-  {
-    _debugPort->println(F("SCD4x::getTemperatureOffset: failed to read offset. Returning 0.0"));
-  }
-  return (offset);
-}
-
-//Get the temperature offset. See 3.6.2
-bool SCD4x::getTemperatureOffset(float *offset)
-{
-  scd4x_signedUnsigned16_t signedUnsigned; // Avoid any ambiguity casting int16_t to uint16_t
-  signedUnsigned.unsigned16 = 0; // Return zero if readRegister fails
-  bool success = readRegister(SCD4x_COMMAND_GET_TEMPERATURE_OFFSET, &signedUnsigned.unsigned16, 1);
-  *offset = ((float)signedUnsigned.signed16) * 175.0 / 65535.0;
+  bool success = sendCommand(SCD4x_COMMAND_PERSIST_SETTINGS);
+  if (delayMillis > 0)
+    delay(delayMillis);
   return (success);
 }
 
-//Get the altitude compenstation. See 1.3.9.
-uint16_t SCD30::getAltitudeCompensation(void)
+//Get 9 bytes from SCD4x. Convert serial number to ASCII chars. See 3.9.2
+//Returns true if serial number is read successfully
+//Reading out the serial number can be used to identify the chip and to verify the presence of the sensor.
+bool SCD4x::getSerialNumber(char *serialNumber)
 {
-  return readRegister(COMMAND_SET_ALTITUDE_COMPENSATION);
-}
-
-//Set the altitude compenstation. See 1.3.9.
-bool SCD30::setAltitudeCompensation(uint16_t altitude)
-{
-  return sendCommand(COMMAND_SET_ALTITUDE_COMPENSATION, altitude);
-}
-
-//Set the pressure compenstation. This is passed during measurement startup.
-//mbar can be 700 to 1200
-bool SCD30::setAmbientPressure(uint16_t pressure_mbar)
-{
-  if (pressure_mbar < 700 || pressure_mbar > 1200)
+  if (periodicMeasurementsAreRunning)
   {
-    return false;
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::getSerialNumber: periodic measurements are running. Aborting"));
+    }
+    return (false);
   }
-  return sendCommand(COMMAND_CONTINUOUS_MEASUREMENT, pressure_mbar);
-}
 
-// SCD30 soft reset
-void SCD30::reset()
-{
-  sendCommand(COMMAND_RESET);
-}
+  _i2cPort->beginTransmission(SCD4x_ADDRESS);
+  _i2cPort->write(SCD4x_COMMAND_GET_SERIAL_NUMBER >> 8);   //MSB
+  _i2cPort->write(SCD4x_COMMAND_GET_SERIAL_NUMBER & 0xFF); //LSB
+  if (_i2cPort->endTransmission() != 0)
+    return (false); //Sensor did not ACK
 
-// Get the current ASC setting
-bool SCD30::getAutoSelfCalibration()
-{
-  uint16_t response = readRegister(COMMAND_AUTOMATIC_SELF_CALIBRATION);
-  if (response == 1)
+  delay(1); //Datasheet specifies this
+
+  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
+  bool error = false;
+  if (_i2cPort->available())
   {
-    return true;
+    byte bytesToCrc[2];
+    int digit = 0;
+    for (byte x = 0; x < 9; x++)
+    {
+      byte incoming = _i2cPort->read();
+
+      switch (x)
+      {
+      case 0:
+      case 1:
+      case 3:
+      case 4:
+      case 6:
+      case 7:
+        serialNumber[digit++] = convertHexToASCII(incoming >> 8);
+        serialNumber[digit++] = convertHexToASCII(incoming & 0x0F);
+        bytesToCrc[x % 2] = incoming;
+        break;
+      default:
+        //Validate CRC
+        uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
+        if (foundCrc != incoming)
+        {
+          if (_printDebug == true)
+          {
+            _debugPort->print(F("SCD4x::readSerialNumber: found CRC in byte "));
+            _debugPort->print(x);
+            _debugPort->print(F(", expected 0x"));
+            _debugPort->print(foundCrc, HEX);
+            _debugPort->print(F(", got 0x"));
+            _debugPort->println(incoming, HEX);
+          }
+          error = true;
+        }
+        break;
+      }
+      serialNumber[digit] = 0; // NULL-terminate the string
+    }
   }
   else
   {
-    return false;
+    if (_printDebug == true)
+    {
+      _debugPort->print(F("SCD4x::readSerialNumber: no SCD4x data found from I2C, I2C claims we should receive "));
+      _debugPort->print(receivedBytes);
+      _debugPort->println(F(" bytes"));
+    }
+    return (false);
   }
+
+  if (error)
+  {
+    if (_printDebug == true)
+      _debugPort->println(F("SCD4x::readSerialNumber: encountered error reading SCD4x data."));
+    return (false);
+  }
+
+  return (true); //Success!
 }
 
-//Begins continuous measurements
-//Continuous measurement status is saved in non-volatile memory. When the sensor
-//is powered down while continuous measurement mode is active SCD30 will measure
-//continuously after repowering without sending the measurement command.
-//Returns true if successful
-bool SCD30::beginMeasuring(uint16_t pressureOffset)
+//PRIVATE: Convert serial number digit to ASCII
+char SCD4x::convertHexToASCII(uint8_t digit)
 {
-  return (sendCommand(COMMAND_CONTINUOUS_MEASUREMENT, pressureOffset));
+  if (digit <= 9)
+    return (char(digit + 0x30));
+  else
+    return (char(digit + 0x41)); // Use upper case for A-F
 }
 
-//Overload - no pressureOffset
-bool SCD30::beginMeasuring(void)
+//Perform self test. Takes 10 seconds to complete. See 3.9.3
+//The perform_self_test feature can be used as an end-of-line test to check sensor functionality
+//and the customer power supply to the sensor.
+bool SCD4x::performSelfTest(void)
 {
-  return (beginMeasuring(0));
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::performSelfTest: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  uint16_t response;
+
+  if (_printDebug == true)
+    _debugPort->println(F("SCD4x::performSelfTest: delaying for 10 seconds..."));
+
+  bool success = readRegister(SCD4x_COMMAND_PERFORM_SELF_TEST, &response, 10000);
+
+  if (_printDebug == true)
+  {
+    _debugPort->print(F("SCD4x::performSelfTest: sensor response is 0x"));
+    if (response < 0x1000) _debugPort->print(F("0"));
+    if (response < 0x100) _debugPort->print(F("0"));
+    if (response < 0x10) _debugPort->print(F("0"));
+    _debugPort->println(response, HEX);
+  }
+
+  return (success && (response == 0x0000));
 }
 
-// Stop continuous measurement
-bool SCD30::StopMeasurement(void)
+//Peform factory reset. See 3.9.4
+//The perform_factory_reset command resets all configuration settings stored in the EEPROM
+//and erases the FRC and ASC algorithm history.
+bool SCD4x::performFactoryReset(uint16_t delayMillis)
 {
-  return (sendCommand(COMMAND_STOP_MEAS));
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::performFactoryReset: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_PERFORM_FACTORY_RESET);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
 }
 
-//Sets interval between measurements
-//2 seconds to 1800 seconds (30 minutes)
-bool SCD30::setMeasurementInterval(uint16_t interval)
+//Reinit. See 3.9.5
+//The reinit command reinitializes the sensor by reloading user settings from EEPROM.
+//Before sending the reinit command, the stop measurement command must be issued.
+//If the reinit command does not trigger the desired re-initialization,
+//a power-cycle should be applied to the SCD4x.
+bool SCD4x::reInit(uint16_t delayMillis)
 {
-  return sendCommand(COMMAND_SET_MEASUREMENT_INTERVAL, interval);
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::reInit: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_REINIT);
+  if (delayMillis > 0)
+    delay(delayMillis);
+  return (success);
+}
+
+//Low Power Single Shot. See 3.10.1
+//In addition to periodic measurement modes, the SCD41 features a single shot measurement mode,
+//i.e. allows for on-demand measurements.
+//The typical communication sequence is as follows:
+//1. The sensor is powered up.
+//2. The I2C master sends a single shot command and waits for the indicated max. command duration time.
+//3. The I2C master reads out data with the read measurement sequence (chapter 3.5.2).
+//4. Steps 2-3 are repeated as required by the application.
+bool SCD4x::measureSingleShot(void)
+{
+  if (_sensorType != SCD4x_SENSOR_SCD41)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::measureSingleShot: _sensorType is not SCD4x_SENSOR_SCD41"));
+      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x(SCD4x_SENSOR_SCD41)"));
+    }
+    return(false);
+  }
+
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::measureSingleShot: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_MEASURE_SINGLE_SHOT);
+
+  if (success && (_printDebug == true))
+  {
+    _debugPort->println(F("SCD4x::measureSingleShot: your data will be ready in five seconds"));
+  }
+
+  return (success);
+}
+
+//On-demand measurement of relative humidity and temperature only.
+//The sensor output is read using the read_measurement command (chapter 3.5.2).
+//CO2 output is returned as 0 ppm.
+bool SCD4x::measureSingleShotRHTOnly(void)
+{
+  if (_sensorType != SCD4x_SENSOR_SCD41)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::measureSingleShotRHTOnly: _sensorType is not SCD4x_SENSOR_SCD41"));
+      _debugPort->println(F("SCD41's need to be instantiated using: SCD4x(SCD4x_SENSOR_SCD41)"));
+    }
+    return(false);
+  }
+
+  if (periodicMeasurementsAreRunning)
+  {
+    if (_printDebug == true)
+    {
+      _debugPort->println(F("SCD4x::measureSingleShotRHTOnly: periodic measurements are running. Aborting"));
+    }
+    return (false);
+  }
+
+  bool success = sendCommand(SCD4x_COMMAND_MEASURE_SINGLE_SHOT_RHT_ONLY);
+
+  if (success && (_printDebug == true))
+  {
+    _debugPort->println(F("SCD4x::measureSingleShot: your data will be ready in 50ms"));
+  }
+
+  return (success);
 }
 
 //Sends a command along with arguments and CRC
@@ -400,7 +935,7 @@ bool SCD4x::sendCommand(uint16_t command, uint16_t arguments)
 //Sends just a command, no arguments, no CRC
 bool SCD4x::sendCommand(uint16_t command)
 {
-  _i2cPort->beginTransmission(SCD30_ADDRESS);
+  _i2cPort->beginTransmission(SCD4x_ADDRESS);
   _i2cPort->write(command >> 8);   //MSB
   _i2cPort->write(command & 0xFF); //LSB
   if (_i2cPort->endTransmission() != 0)
