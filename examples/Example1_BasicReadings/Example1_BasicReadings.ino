@@ -31,6 +31,7 @@ void setup()
 
   mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
+  //.begin will start periodic measurements for us (see the later examples for details on how to overrride this)
   if (mySensor.begin() == false)
   {
     Serial.println("Sensor not detected. Please check wiring. Freezing...");
@@ -43,8 +44,10 @@ void setup()
 
 void loop()
 {
-  if (mySensor.getDataReadyStatus())
+  if (mySensor.getDataReadyStatus()) // getDataReadyStatus will return true when fresh data is available
   {
+    Serial.println();
+
     Serial.print("CO2(ppm):");
     Serial.print(mySensor.getCO2());
 
@@ -57,7 +60,7 @@ void loop()
     Serial.println();
   }
   else
-    Serial.println("Waiting for new data");
+    Serial.print(".");
 
   delay(500);
 }
