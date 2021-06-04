@@ -43,7 +43,7 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
   //To be safe, let's stop period measurements before we do anything else
   //The user can override this by setting skipStopPeriodicMeasurements to true
   if (skipStopPeriodicMeasurements == false)
-    success &= stopPeriodicMeasurement();
+    success &= stopPeriodicMeasurement(); // Delays for 500ms...
 
   char serialNumber[13]; // Serial number is 12 digits plus trailing NULL
   success &= getSerialNumber(serialNumber); // Read the serial number. Return false if the CRC check fails.
@@ -186,23 +186,23 @@ bool SCD4x::readMeasurement(void)
       {
       case 0:
       case 1:
-        tempCO2.bytes[x == 0 ? 1 : 0] = incoming;
-        bytesToCrc[x] = incoming;
+        tempCO2.bytes[x == 0 ? 1 : 0] = incoming; // Store the two CO2 bytes in little-endian format
+        bytesToCrc[x] = incoming; // Calculate the CRC on the two CO2 bytes in the order they arrive
         break;
       case 3:
       case 4:
-        tempTemperature.bytes[x == 3 ? 1 : 0] = incoming;
-        bytesToCrc[x % 2] = incoming;
+        tempTemperature.bytes[x == 3 ? 1 : 0] = incoming; // Store the two T bytes in little-endian format
+        bytesToCrc[x % 3] = incoming; // Calculate the CRC on the two T bytes in the order they arrive
         break;
       case 6:
       case 7:
-        tempHumidity.bytes[x == 6 ? 1 : 0] = incoming;
-        bytesToCrc[x % 2] = incoming;
+        tempHumidity.bytes[x == 6 ? 1 : 0] = incoming; // Store the two RH bytes in little-endian format
+        bytesToCrc[x % 3] = incoming; // Calculate the CRC on the two RH bytes in the order they arrive
         break;
-      default:
+      default: // x == 2, 5, 8
         //Validate CRC
-        uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
-        if (foundCrc != incoming)
+        uint8_t foundCrc = computeCRC8(bytesToCrc, 2); // Calculate what the CRC should be for these two bytes
+        if (foundCrc != incoming) // Does this match the CRC byte from the sensor?
         {
           if (_printDebug == true)
           {
@@ -366,7 +366,7 @@ bool SCD4x::getTemperatureOffset(float *offset)
 
 //Set the sensor altitude (metres above sea level). See 3.6.3
 //Max command duration: 1ms
-//The user can set delayMillis to zero f they want the function to return immediately.
+//The user can set delayMillis to zero if they want the function to return immediately.
 //Reading and writing of the sensor altitude must be done while the SCD4x is in idle mode.
 //Typically, the sensor altitude is set once after device installation. To save the setting to the EEPROM,
 //the persist setting (see chapter 3.9.1) command must be issued.
@@ -426,8 +426,9 @@ bool SCD4x::getSensorAltitude(uint16_t *altitude)
 
 //Set the ambient pressure (Pa). See 3.6.5
 //Max command duration: 1ms
-//The user can set delayMillis to zero f they want the function to return immediately.
+//The user can set delayMillis to zero if they want the function to return immediately.
 //The set_ambient_pressure command can be sent during periodic measurements to enable continuous pressure compensation.
+//setAmbientPressure overrides setSensorAltitude
 bool SCD4x::setAmbientPressure(float pressure, uint16_t delayMillis)
 {
   if (pressure < 0)
@@ -465,7 +466,7 @@ float SCD4x::performForcedRecalibration(uint16_t concentration)
     return (0.0);
   }
 
-  float correction;
+  float correction = 0.0;
   bool success = performForcedRecalibration(concentration, &correction);
   if ((success == false) && (_printDebug == true))
   {
@@ -546,7 +547,7 @@ bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction
 
   *correction = ((float)correctionWord) - 32768; // FRC correction [ppm CO2] = word[0] – 0x8000
 
-  if (correctionWord == 0xffff)
+  if (correctionWord == 0xffff) //A return value of 0xffff indicates that the forced recalibration has failed
     return (false);
   
   return (true);
@@ -669,7 +670,7 @@ bool SCD4x::persistSettings(uint16_t delayMillis)
   return (success);
 }
 
-//Get 9 bytes from SCD4x. Convert serial number to ASCII chars. See 3.9.2
+//Get 9 bytes from SCD4x. Convert 48-bit serial number to ASCII chars. See 3.9.2
 //Returns true if serial number is read successfully
 //Reading out the serial number can be used to identify the chip and to verify the presence of the sensor.
 bool SCD4x::getSerialNumber(char *serialNumber)
@@ -703,20 +704,20 @@ bool SCD4x::getSerialNumber(char *serialNumber)
 
       switch (x)
       {
-      case 0:
+      case 0: // The serial number arrives as: two bytes, CRC, two bytes, CRC, two bytes, CRC
       case 1:
       case 3:
       case 4:
       case 6:
       case 7:
-        serialNumber[digit++] = convertHexToASCII(incoming >> 8);
+        serialNumber[digit++] = convertHexToASCII(incoming >> 4); // Convert each nibble to ASCII
         serialNumber[digit++] = convertHexToASCII(incoming & 0x0F);
-        bytesToCrc[x % 2] = incoming;
+        bytesToCrc[x % 3] = incoming;
         break;
-      default:
+      default: // x == 2, 5, 8
         //Validate CRC
-        uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
-        if (foundCrc != incoming)
+        uint8_t foundCrc = computeCRC8(bytesToCrc, 2); // Calculate what the CRC should be for these two bytes
+        if (foundCrc != incoming) // Does this match the CRC byte from the sensor?
         {
           if (_printDebug == true)
           {
@@ -794,7 +795,7 @@ bool SCD4x::performSelfTest(void)
     _debugPort->println(response, HEX);
   }
 
-  return (success && (response == 0x0000));
+  return (success && (response == 0x0000)); // word[0] = 0 → no malfunction detected
 }
 
 //Peform factory reset. See 3.9.4

@@ -96,6 +96,7 @@ class SCD4x
 public:
   SCD4x(scd4x_sensor_type_e sensorType = SCD4x_SENSOR_SCD40);
 
+  // Please see the code examples for an explanation of what measBegin, autoCalibrate and skipStopPeriodicMeasurements do
   bool begin(bool measBegin) { return begin(Wire, measBegin); }
   bool begin(bool measBegin, bool autoCalibrate) { return begin(Wire, measBegin, autoCalibrate); }
   bool begin(bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements) { return begin(Wire, measBegin, autoCalibrate, skipStopPeriodicMeasurements); }
@@ -105,49 +106,60 @@ public:
   bool begin(TwoWire &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false); //By default use Wire port
 #endif
 
-  void enableDebugging(Stream &debugPort = Serial); //Turn on debug printing. If user doesn't specify then Serial will be used.
+  void enableDebugging(Stream &debugPort = Serial); //Turn on debug printing. If user doesn't specify then Serial will be used
 
-  bool startPeriodicMeasurement(void); //Signal update interval is 5 seconds
+  bool startPeriodicMeasurement(void); // Signal update interval is 5 seconds
+
   // stopPeriodicMeasurement can be called before .begin if required
   // If the sensor has been begun (_i2cPort is not NULL) then _i2cPort is used
   // If the sensor has not been begun (_i2cPort is NULL) then wirePort and address are used (which will default to Wire)
+  // Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
 #ifdef USE_TEENSY3_I2C_LIB
-  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, i2c_t3 &wirePort = Wire); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, i2c_t3 &wirePort = Wire);
 #else
-  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, TwoWire &wirePort = Wire); //Note that the sensor will only respond to other commands after waiting 500 ms after issuing the stop_periodic_measurement command.
+  bool stopPeriodicMeasurement(uint16_t delayMillis = 500, TwoWire &wirePort = Wire);
 #endif
 
-  bool readMeasurement(void);
+  bool readMeasurement(void); // Check for fresh data; store it. Returns true if fresh data is available
 
-  uint16_t getCO2(void);
-  float getHumidity(void);
-  float getTemperature(void);
+  uint16_t getCO2(void); // Return the CO2 PPM. Automatically request fresh data is the data is 'stale'
+  float getHumidity(void); // Return the RH. Automatically request fresh data is the data is 'stale'
+  float getTemperature(void); // Return the temperature. Automatically request fresh data is the data is 'stale'
 
-  bool setTemperatureOffset(float offset, uint16_t delayMillis = 1);
+  // Define how warm the sensor is compared to ambient, so RH and T are temperature compensated. Has no effect on the CO2 reading
+  // Default offset is 4C
+  bool setTemperatureOffset(float offset, uint16_t delayMillis = 1); // Returns true if I2C transfer was OK
   float getTemperatureOffset(void); // Will return zero if offset is invalid
   bool getTemperatureOffset(float *offset); // Returns true if offset is valid
+
+  // Define the sensor altitude in metres above sea level, so RH and CO2 are compensated for atmospheric pressure
+  // Default altitude is 0m
   bool setSensorAltitude(uint16_t altitude, uint16_t delayMillis = 1);
-  uint16_t getSensorAltitude(void); // Will return zero if offset is invalid
-  bool getSensorAltitude(uint16_t *altitude); // Returns true if offset is valid
+  uint16_t getSensorAltitude(void); // Will return zero if altitude is invalid
+  bool getSensorAltitude(uint16_t *altitude); // Returns true if altitude is valid
+
+  // Define the ambient pressure in Pascals, so RH and CO2 are compensated for atmospheric pressure
+  // setAmbientPressure overrides setSensorAltitude
   bool setAmbientPressure(float pressure, uint16_t delayMillis = 1);
 
-  float performForcedRecalibration(uint16_t concentration);
+  float performForcedRecalibration(uint16_t concentration); // Returns the FRC correction value
   bool performForcedRecalibration(uint16_t concentration, float *correction); // Returns true if FRC is successful
+
   bool setAutomaticSelfCalibrationEnabled(bool enabled = true, uint16_t delayMillis = 1);
   bool getAutomaticSelfCalibrationEnabled(void);
   bool getAutomaticSelfCalibrationEnabled(uint16_t *enabled);
 
-  bool startLowPowerPeriodicMeasurement(void);
-  bool getDataReadyStatus(void);
+  bool startLowPowerPeriodicMeasurement(void); // Start low power measurements - receive data every 30 seconds
+  bool getDataReadyStatus(void); // Returns true if fresh data is available
 
-  bool persistSettings(uint16_t delayMillis = 800);
+  bool persistSettings(uint16_t delayMillis = 800); // Copy sensor settings from RAM to EEPROM
   bool getSerialNumber(char *serialNumber); // Returns true if serial number is read correctly
-  bool performSelfTest(void);
-  bool performFactoryReset(uint16_t delayMillis = 1200);
-  bool reInit(uint16_t delayMillis = 20);
+  bool performSelfTest(void); // Takes 10 seconds to complete. Returns true if the test is successful
+  bool performFactoryReset(uint16_t delayMillis = 1200); // Reset all settings to the factory values
+  bool reInit(uint16_t delayMillis = 20); // Re-initialize the sensor, load settings from EEPROM
 
-  bool measureSingleShot(void); // SCD41 only
-  bool measureSingleShotRHTOnly(void); // SCD41 only
+  bool measureSingleShot(void); // SCD41 only. Request a single measurement. Data will be ready in 5 seconds
+  bool measureSingleShotRHTOnly(void); // SCD41 only. Request RH and T data only. Data will be ready in 50ms
 
   bool sendCommand(uint16_t command, uint16_t arguments);
   bool sendCommand(uint16_t command);
