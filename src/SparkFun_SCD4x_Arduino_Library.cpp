@@ -52,7 +52,7 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
 
   if (_printDebug == true)
   {
-    _debugPort->print(F("SCD30::begin: got serial number 0x"));
+    _debugPort->print(F("SCD40::begin: got serial number 0x"));
     _debugPort->println(serialNumber);
   }
 
@@ -762,7 +762,7 @@ char SCD4x::convertHexToASCII(uint8_t digit)
   if (digit <= 9)
     return (char(digit + 0x30));
   else
-    return (char(digit + 0x41)); // Use upper case for A-F
+    return (char(digit + 0x41 - 10)); // Use upper case for A-F
 }
 
 //Perform self test. Takes 10 seconds to complete. See 3.9.3
