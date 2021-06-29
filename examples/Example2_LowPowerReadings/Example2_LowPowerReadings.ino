@@ -8,7 +8,7 @@
   basically do whatever you want with this code.
 
   Feel like supporting open source hardware?
-  Buy a board from SparkFun! https://www.sparkfun.com/products/nnnnn
+  Buy a board from SparkFun! https://www.sparkfun.com/products/18365
 
   This example prints the current CO2 level, relative humidity, and temperature in C.
 
@@ -31,7 +31,7 @@ void setup()
 
   mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
-  //.begin will start periodic measurements for us (see the later examples for details on how to overrride this)
+  //.begin will start periodic measurements for us (see the later examples for details on how to override this)
   if (mySensor.begin() == false)
   {
     Serial.println(F("Sensor not detected. Please check wiring. Freezing..."));

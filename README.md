@@ -1,8 +1,8 @@
 # SparkFun SCD4x CO<sub>2</sub> Sensor Library
 
-[![SparkX SCD40 Breakout (Qwiic) (SPX-nnnnn)]()](https://www.sparkfun.com/products/nnnnn)
+[![SparkX SCD40 Breakout (Qwiic) (SPX-18365)](https://cdn.sparkfun.com//assets/parts/1/7/7/1/9/18365-Qwiic_SCD40-01.jpg)](https://www.sparkfun.com/products/18365)
 
-[*SparkX SCD40 Breakout (Qwiic) (SPX-nnnnn)*](https://www.sparkfun.com/products/nnnnn)
+[*SparkX SCD40 Breakout (Qwiic) (SPX-18365)*](https://www.sparkfun.com/products/18365)
 
 The SCD4x is Sensirion's next generation miniature CO2 sensor. This sensor builds on the photoacoustic sensing principle and Sensirion's patented PAsens® and CMOSens® technology to offer high accuracy at an unmatched price and smallest form factor. On-chip signal compensation is realized with the built-in SHT4x humidity and temperature sensor.
 

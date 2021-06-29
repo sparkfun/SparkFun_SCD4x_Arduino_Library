@@ -2,7 +2,7 @@
   This is a library written for the SCD4x family of CO2 sensors
   SparkFun sells these at its website: www.sparkfun.com
   Do you like this library? Help support SparkFun. Buy a board!
-  https://www.sparkfun.com/products/nnnnn
+  https://www.sparkfun.com/products/18365
 
   Written by Paul Clark @ SparkFun Electronics, June 2nd, 2021
 

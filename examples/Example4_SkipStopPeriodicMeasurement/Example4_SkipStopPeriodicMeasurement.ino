@@ -8,7 +8,7 @@
   basically do whatever you want with this code.
 
   Feel like supporting open source hardware?
-  Buy a board from SparkFun! https://www.sparkfun.com/products/nnnnn
+  Buy a board from SparkFun! https://www.sparkfun.com/products/18365
 
   This example prints the current CO2 level, relative humidity, and temperature in C.
 
