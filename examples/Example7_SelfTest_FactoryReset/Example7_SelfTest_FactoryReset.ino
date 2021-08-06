@@ -29,7 +29,7 @@ void setup()
   Serial.println(F("SCD4x Example"));
   Wire.begin();
 
-  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  //mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
   if (mySensor.begin() == false)
   {
@@ -45,17 +45,17 @@ void setup()
   }  
 
   //Now we can run the self test:
-  Serial.print(F("Starting the self-test. This will take 10 seconds to complete..."));
+  Serial.println(F("Starting the self-test. This will take 10 seconds to complete..."));
 
   bool success = mySensor.performSelfTest();
 
-  Serial.print(F("The self test "));
+  Serial.print(F("The self test was "));
   if (success == false)
     Serial.print(F("not "));
   Serial.println(F("successful"));
 
   //We can do a factory reset if we want to completely reset the sensor
-  Serial.print(F("Starting the factory reset. This will take 1200ms seconds to complete..."));
+  Serial.println(F("Starting the factory reset. This will take 1200ms seconds to complete..."));
 
   success = mySensor.performFactoryReset();
 

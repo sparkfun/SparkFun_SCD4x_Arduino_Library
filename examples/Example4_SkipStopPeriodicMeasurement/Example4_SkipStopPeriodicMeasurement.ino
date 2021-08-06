@@ -29,7 +29,7 @@ void setup()
   Serial.println(F("SCD4x Example"));
   Wire.begin();
 
-  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  //mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
   //.begin has three boolean parameters:
   //  measBegin: set to true to begin periodic measurements automatically;

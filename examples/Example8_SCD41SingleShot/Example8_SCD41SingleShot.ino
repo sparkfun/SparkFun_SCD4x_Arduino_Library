@@ -30,7 +30,7 @@ void setup()
   Serial.println(F("SCD41 Example"));
   Wire.begin();
 
-  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  //mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
   if (mySensor.begin(false, true, false) == false) // Do not start periodic measurements
   //measBegin_________/     |     |

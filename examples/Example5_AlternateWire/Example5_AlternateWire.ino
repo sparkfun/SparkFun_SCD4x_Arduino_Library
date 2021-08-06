@@ -30,7 +30,7 @@ void setup()
   
   Wire1.begin(); // In this example, let's use Wire1 instead of Wire
 
-  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  //mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
   
   //mySensor.enableDebugging(Serial1); // Uncomment this line instead to get helpful debug messages on Serial1
 
