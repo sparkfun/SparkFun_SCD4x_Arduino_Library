@@ -123,9 +123,9 @@ bool SCD4x::stopPeriodicMeasurement(uint16_t delayMillis, TwoWire &wirePort)
   else
   {
     // If the sensor has not been begun (_i2cPort is NULL) then wirePort is used (which will default to Wire)
-    _i2cPort->beginTransmission(SCD4x_ADDRESS);
-    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT >> 8);   //MSB
-    _i2cPort->write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT & 0xFF); //LSB
+    wirePort.beginTransmission(SCD4x_ADDRESS);
+    wirePort.write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT >> 8);   //MSB
+    wirePort.write(SCD4x_COMMAND_STOP_PERIODIC_MEASUREMENT & 0xFF); //LSB
     i2cResult = wirePort.endTransmission();
   }
 
