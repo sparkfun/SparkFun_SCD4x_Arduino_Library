@@ -29,7 +29,7 @@ void setup()
   Serial.println(F("SCD4x Example"));
   Wire.begin();
 
-  mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
+  //mySensor.enableDebugging(); // Uncomment this line to get helpful debug messages on Serial
 
   //.begin will start periodic measurements for us (see the later examples for details on how to override this)
   if (mySensor.begin() == false)
@@ -54,11 +54,7 @@ void setup()
     Serial.println(F("Low power mode enabled!"));
   }
 
-  //Finally, we need to restart periodic measurements
-  if (mySensor.startPeriodicMeasurement() == true)
-  {
-    Serial.println(F("Periodic measurements restarted!"));
-  }
+  //The SCD4x has data ready every thirty seconds
 }
 
 void loop()

@@ -627,7 +627,10 @@ bool SCD4x::startLowPowerPeriodicMeasurement(void)
     return (false);
   }
 
-  return sendCommand(SCD4x_COMMAND_START_LOW_POWER_PERIODIC_MEASUREMENT);
+  bool success = sendCommand(SCD4x_COMMAND_START_LOW_POWER_PERIODIC_MEASUREMENT);
+  if (success)
+    periodicMeasurementsAreRunning = true;
+  return (success);
 }
 
 //Returns true when data is available. See 3.8.2
