@@ -50,11 +50,13 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
   if (success == false)
     return (false);
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (_printDebug == true)
   {
     _debugPort->print(F("SCD40::begin: got serial number 0x"));
     _debugPort->println(serialNumber);
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 
   if (autoCalibrate == true) // Must be done before periodic measurements are started
   {
@@ -79,8 +81,10 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
 //You can also call it with other streams like Serial1, SerialUSB, etc.
 void SCD4x::enableDebugging(Stream &debugPort)
 {
+  #if SCD4x_ENABLE_DEBUGLOG
   _debugPort = &debugPort;
   _printDebug = true;
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 }
 
 //Start periodic measurements. See 3.5.1
@@ -89,10 +93,12 @@ bool SCD4x::startPeriodicMeasurement(void)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::startPeriodicMeasurement: periodic measurements are already running"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (true); //Maybe this should be false?
   }
 
@@ -137,11 +143,13 @@ bool SCD4x::stopPeriodicMeasurement(uint16_t delayMillis, TwoWire &wirePort)
     return(true);
   }
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (_printDebug == true)
   {
     _debugPort->print(F("SCD4x::stopPeriodicMeasurement: I2C error: "));
     _debugPort->println(i2cResult);
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
   return (false);
 }
 
@@ -173,7 +181,10 @@ bool SCD4x::readMeasurement(void)
 
   delay(1); //Datasheet specifies this
 
-  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
+  #if SCD4x_ENABLE_DEBUGLOG
+  uint8_t receivedBytes = (uint8_t)
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  _i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
   bool error = false;
   if (_i2cPort->available())
   {
@@ -204,6 +215,7 @@ bool SCD4x::readMeasurement(void)
         uint8_t foundCrc = computeCRC8(bytesToCrc, 2); // Calculate what the CRC should be for these two bytes
         if (foundCrc != incoming) // Does this match the CRC byte from the sensor?
         {
+          #if SCD4x_ENABLE_DEBUGLOG
           if (_printDebug == true)
           {
             _debugPort->print(F("SCD4x::readMeasurement: found CRC in byte "));
@@ -213,6 +225,7 @@ bool SCD4x::readMeasurement(void)
             _debugPort->print(F(", got 0x"));
             _debugPort->println(incoming, HEX);
           }
+          #endif // if SCD4x_ENABLE_DEBUGLOG
           error = true;
         }
         break;
@@ -221,19 +234,23 @@ bool SCD4x::readMeasurement(void)
   }
   else
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->print(F("SCD4x::readMeasurement: no SCD4x data found from I2C, I2C claims we should receive "));
       _debugPort->print(receivedBytes);
       _debugPort->println(F(" bytes"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   if (error)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
       _debugPort->println(F("SCD4x::readMeasurement: encountered error reading SCD4x data."));
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   //Now copy the int16s into their associated floats
@@ -295,27 +312,33 @@ bool SCD4x::setTemperatureOffset(float offset, uint16_t delayMillis)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setTemperatureOffset: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   if (offset < 0)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setTemperatureOffset: offset must be >= 0C"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   if (offset >= 175)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setTemperatureOffset: offset must be < 175C"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   uint16_t offsetWord = (uint16_t)(offset * 65536 / 175); // Toffset [°C] * 2^16 / 175
@@ -330,19 +353,26 @@ float SCD4x::getTemperatureOffset(void)
 {
  if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getTemperatureOffset: periodic measurements are running. Returning 0.0"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (0.0);
   }
 
   float offset;
-  bool success = getTemperatureOffset(&offset);
+  #if SCD4x_ENABLE_DEBUGLOG
+  bool success = 
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  getTemperatureOffset(&offset);
+  #if SCD4x_ENABLE_DEBUGLOG
   if ((success == false) && (_printDebug == true))
   {
     _debugPort->println(F("SCD4x::getTemperatureOffset: failed to read offset. Returning 0.0"));
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
   return (offset);
 }
 
@@ -351,10 +381,12 @@ bool SCD4x::getTemperatureOffset(float *offset)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getTemperatureOffset: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -375,10 +407,12 @@ bool SCD4x::setSensorAltitude(uint16_t altitude, uint16_t delayMillis)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setSensorAltitude: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -393,19 +427,26 @@ uint16_t SCD4x::getSensorAltitude(void)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getSensorAltitude: periodic measurements are running. Returning 0"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (0);
   }
 
   uint16_t altitude = 0;
-  bool success = getSensorAltitude(&altitude);
+  #if SCD4x_ENABLE_DEBUGLOG
+  bool success = 
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  getSensorAltitude(&altitude);
+  #if SCD4x_ENABLE_DEBUGLOG
   if ((success == false) && (_printDebug == true))
   {
     _debugPort->println(F("SCD4x::getSensorAltitude: failed to read altitude. Returning 0"));
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
   return (altitude);
 }
 
@@ -414,10 +455,12 @@ bool SCD4x::getSensorAltitude(uint16_t *altitude)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getSensorAltitude: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -433,18 +476,22 @@ bool SCD4x::setAmbientPressure(float pressure, uint16_t delayMillis)
 {
   if (pressure < 0)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setAmbientPressure: pressure must be >= 0 Pa"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   if (pressure > 6553500)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setAmbientPressure: pressure must be <= 6553500 Pa"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   uint16_t pressureWord = (uint16_t)(pressure / 100);
@@ -459,19 +506,26 @@ float SCD4x::performForcedRecalibration(uint16_t concentration)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::performForcedRecalibration: periodic measurements are running. Returning 0.0"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (0.0);
   }
 
   float correction = 0.0;
-  bool success = performForcedRecalibration(concentration, &correction);
+  #if SCD4x_ENABLE_DEBUGLOG
+  bool success = 
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  performForcedRecalibration(concentration, &correction);
+  #if SCD4x_ENABLE_DEBUGLOG
   if ((success == false) && (_printDebug == true))
   {
     _debugPort->println(F("SCD4x::performForcedRecalibration: FRC failed"));
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
   return (correction);
 }
 
@@ -488,10 +542,12 @@ bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::performForcedRecalibration: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -504,7 +560,10 @@ bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction
 
   delay(400); //Datasheet specifies this
 
-  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)3);
+  #if SCD4x_ENABLE_DEBUGLOG
+  uint8_t receivedBytes = (uint8_t)
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  _i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)3);
   bool error = false;
   if (_i2cPort->available())
   {
@@ -517,6 +576,7 @@ bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction
     uint8_t foundCrc = computeCRC8(bytesToCrc, 2);
     if (foundCrc != incomingCrc)
     {
+      #if SCD4x_ENABLE_DEBUGLOG
       if (_printDebug == true)
       {
         _debugPort->print(F("SCD4x::performForcedRecalibration: CRC error. Expected 0x"));
@@ -524,24 +584,29 @@ bool SCD4x::performForcedRecalibration(uint16_t concentration, float *correction
         _debugPort->print(F(", got 0x"));
         _debugPort->println(incomingCrc, HEX);
       }
+      #endif // if SCD4x_ENABLE_DEBUGLOG
       error = true;
     }
   }
   else
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->print(F("SCD4x::performForcedRecalibration: no SCD4x data found from I2C, I2C claims we should receive "));
       _debugPort->print(receivedBytes);
       _debugPort->println(F(" bytes"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   if (error)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
       _debugPort->println(F("SCD4x::performForcedRecalibration: encountered error reading SCD4x data."));
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -560,10 +625,12 @@ bool SCD4x::setAutomaticSelfCalibrationEnabled(bool enabled, uint16_t delayMilli
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::setAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -579,10 +646,12 @@ bool SCD4x::getAutomaticSelfCalibrationEnabled(void)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -590,10 +659,12 @@ bool SCD4x::getAutomaticSelfCalibrationEnabled(void)
   bool success = getAutomaticSelfCalibrationEnabled(&enabled);
   if (success == false)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("getAutomaticSelfCalibrationEnabled: failed to get self calibration status. Returning false"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
   return (enabled == 0x0001);
@@ -604,10 +675,12 @@ bool SCD4x::getAutomaticSelfCalibrationEnabled(uint16_t *enabled)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getAutomaticSelfCalibrationEnabled: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -620,10 +693,12 @@ bool SCD4x::startLowPowerPeriodicMeasurement(void)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::startLowPowerPeriodicMeasurement: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -660,10 +735,12 @@ bool SCD4x::persistSettings(uint16_t delayMillis)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::persistSettings: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -680,10 +757,12 @@ bool SCD4x::getSerialNumber(char *serialNumber)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::getSerialNumber: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -695,7 +774,10 @@ bool SCD4x::getSerialNumber(char *serialNumber)
 
   delay(1); //Datasheet specifies this
 
-  uint8_t receivedBytes = (uint8_t)_i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
+  #if SCD4x_ENABLE_DEBUGLOG
+  uint8_t receivedBytes = (uint8_t)
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+  _i2cPort->requestFrom((uint8_t)SCD4x_ADDRESS, (uint8_t)9);
   bool error = false;
   if (_i2cPort->available())
   {
@@ -722,6 +804,7 @@ bool SCD4x::getSerialNumber(char *serialNumber)
         uint8_t foundCrc = computeCRC8(bytesToCrc, 2); // Calculate what the CRC should be for these two bytes
         if (foundCrc != incoming) // Does this match the CRC byte from the sensor?
         {
+          #if SCD4x_ENABLE_DEBUGLOG
           if (_printDebug == true)
           {
             _debugPort->print(F("SCD4x::readSerialNumber: found CRC in byte "));
@@ -731,6 +814,7 @@ bool SCD4x::getSerialNumber(char *serialNumber)
             _debugPort->print(F(", got 0x"));
             _debugPort->println(incoming, HEX);
           }
+          #endif // if SCD4x_ENABLE_DEBUGLOG
           error = true;
         }
         break;
@@ -740,19 +824,23 @@ bool SCD4x::getSerialNumber(char *serialNumber)
   }
   else
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->print(F("SCD4x::readSerialNumber: no SCD4x data found from I2C, I2C claims we should receive "));
       _debugPort->print(receivedBytes);
       _debugPort->println(F(" bytes"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   if (error)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
       _debugPort->println(F("SCD4x::readSerialNumber: encountered error reading SCD4x data."));
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -775,20 +863,25 @@ bool SCD4x::performSelfTest(void)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::performSelfTest: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   uint16_t response;
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (_printDebug == true)
     _debugPort->println(F("SCD4x::performSelfTest: delaying for 10 seconds..."));
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 
   bool success = readRegister(SCD4x_COMMAND_PERFORM_SELF_TEST, &response, 10000);
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (_printDebug == true)
   {
     _debugPort->print(F("SCD4x::performSelfTest: sensor response is 0x"));
@@ -797,6 +890,7 @@ bool SCD4x::performSelfTest(void)
     if (response < 0x10) _debugPort->print(F("0"));
     _debugPort->println(response, HEX);
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 
   return (success && (response == 0x0000)); // word[0] = 0 → no malfunction detected
 }
@@ -808,10 +902,12 @@ bool SCD4x::performFactoryReset(uint16_t delayMillis)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::performFactoryReset: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -830,10 +926,12 @@ bool SCD4x::reInit(uint16_t delayMillis)
 {
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::reInit: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
@@ -855,29 +953,35 @@ bool SCD4x::measureSingleShot(void)
 {
   if (_sensorType != SCD4x_SENSOR_SCD41)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShot: _sensorType is not SCD4x_SENSOR_SCD41"));
       _debugPort->println(F("SCD41's need to be instantiated using: SCD4x mySensor(SCD4x_SENSOR_SCD41)"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return(false);
   }
 
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShot: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   bool success = sendCommand(SCD4x_COMMAND_MEASURE_SINGLE_SHOT);
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (success && (_printDebug == true))
   {
     _debugPort->println(F("SCD4x::measureSingleShot: your data will be ready in five seconds"));
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 
   return (success);
 }
@@ -889,29 +993,35 @@ bool SCD4x::measureSingleShotRHTOnly(void)
 {
   if (_sensorType != SCD4x_SENSOR_SCD41)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShotRHTOnly: _sensorType is not SCD4x_SENSOR_SCD41"));
       _debugPort->println(F("SCD41's need to be instantiated using: SCD4x mySensor(SCD4x_SENSOR_SCD41)"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return(false);
   }
 
   if (periodicMeasurementsAreRunning)
   {
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->println(F("SCD4x::measureSingleShotRHTOnly: periodic measurements are running. Aborting"));
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
     return (false);
   }
 
   bool success = sendCommand(SCD4x_COMMAND_MEASURE_SINGLE_SHOT_RHT_ONLY);
 
+  #if SCD4x_ENABLE_DEBUGLOG
   if (success && (_printDebug == true))
   {
     _debugPort->println(F("SCD4x::measureSingleShot: your data will be ready in 50ms"));
   }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 
   return (success);
 }
@@ -971,6 +1081,7 @@ bool SCD4x::readRegister(uint16_t registerAddress, uint16_t *response, uint16_t 
     uint8_t expectedCRC = computeCRC8(data, 2);
     if (crc == expectedCRC) // Return true if CRC check is OK
       return (true);
+    #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)
     {
       _debugPort->print(F("SCD4x::readRegister: CRC fail: expected 0x"));
@@ -978,6 +1089,7 @@ bool SCD4x::readRegister(uint16_t registerAddress, uint16_t *response, uint16_t 
       _debugPort->print(F(", got 0x"));
       _debugPort->println(crc, HEX);
     }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
   }
   return (false);
 }
