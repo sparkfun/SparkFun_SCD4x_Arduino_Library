@@ -35,6 +35,15 @@
 #include <Wire.h>
 #endif
 
+//Enable/disable including debug log (to allow saving some space)
+#ifndef SCD4x_ENABLE_DEBUGLOG
+  #if defined(LIBRARIES_NO_LOG) && LIBRARIES_NO_LOG
+    #define SCD4x_ENABLE_DEBUGLOG 0 // OFF/disabled/excluded on demand
+  #else
+    #define SCD4x_ENABLE_DEBUGLOG 1 // ON/enabled/included by default
+  #endif
+#endif
+
 //The default I2C address for the SCD4x is 0x62.
 #define SCD4x_ADDRESS 0x62
 
@@ -196,8 +205,10 @@ private:
   //Convert serial number digit to ASCII
   char convertHexToASCII(uint8_t digit);
 
+  #if SCD4x_ENABLE_DEBUGLOG
   //Debug
   Stream *_debugPort;          //The stream to send debug messages to if enabled. Usually Serial.
   boolean _printDebug = false; //Flag to print debugging variables
+  #endif // if SCD4x_ENABLE_DEBUGLOG
 };
 #endif
