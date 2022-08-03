@@ -28,6 +28,10 @@
 
 // #define USE_TEENSY3_I2C_LIB
 
+// Uncomment the next #define to EXclude any debug logging from the code, by default debug logging code will be included
+
+// #define SCD4x_ENABLE_DEBUGLOG 0 // OFF/disabled/excluded on demand
+
 #include "Arduino.h"
 #ifdef USE_TEENSY3_I2C_LIB
 #include <i2c_t3.h>
