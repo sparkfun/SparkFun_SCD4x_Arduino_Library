@@ -181,6 +181,8 @@ public:
 
   uint8_t computeCRC8(uint8_t data[], uint8_t len);
 
+  bool getSensorType(scd4x_sensor_type_e *sensorType, char *serialNumber); // Determine sensor type from serial number.
+
 private:
   //Variables
 #ifdef USE_TEENSY3_I2C_LIB
@@ -191,7 +193,7 @@ private:
 
   //Sensor type
   scd4x_sensor_type_e _sensorType;
-
+  
   //Global main datums
   float co2 = 0;
   float temperature = 0;
@@ -208,6 +210,12 @@ private:
 
   //Convert serial number digit to ASCII
   char convertHexToASCII(uint8_t digit);
+
+  // Convert serial number string to hex digits.
+  void convertASCIIToHex(const char *hexstr, uint16_t *integers);
+
+  // Helper function to compare the serial number to known IDs.
+  uint16_t extractMaskedSensorType(uint16_t *serialNumberArray);
 
   #if SCD4x_ENABLE_DEBUGLOG
   //Debug
