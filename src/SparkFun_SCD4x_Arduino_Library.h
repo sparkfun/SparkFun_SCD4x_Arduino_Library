@@ -5,6 +5,7 @@
   https://www.sparkfun.com/products/18365
 
   Written by Paul Clark @ SparkFun Electronics, June 2nd, 2021
+  Revision by Alex Brudner @ SparkFun Electronics
 
   The SCD41 measures CO2 from 400ppm to 5000ppm with an accuracy of +/- 40ppm + 5% of reading
 
@@ -14,7 +15,7 @@
   https://github.com/sparkfun/SparkFun_SCD4x_Arduino_Library
 
   Development environment specifics:
-  Arduino IDE 1.8.13
+  Arduino IDE 1.8.13 and 2.1.0
 
   SparkFun code, firmware, and software is released under the MIT License.
   Please see LICENSE.md for more details.
@@ -101,7 +102,8 @@ typedef union
 typedef enum
 {
   SCD4x_SENSOR_SCD40 = 0,
-  SCD4x_SENSOR_SCD41
+  SCD4x_SENSOR_SCD41,
+  SCD4x_SENSOR_INVALID
 } scd4x_sensor_type_e;
 
 class SCD4x
@@ -113,10 +115,11 @@ public:
   bool begin(bool measBegin) { return begin(Wire, measBegin); }
   bool begin(bool measBegin, bool autoCalibrate) { return begin(Wire, measBegin, autoCalibrate); }
   bool begin(bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements) { return begin(Wire, measBegin, autoCalibrate, skipStopPeriodicMeasurements); }
+  bool begin(bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements, bool pollAndSetDeviceType) { return begin(Wire, measBegin, autoCalibrate, skipStopPeriodicMeasurements, pollAndSetDeviceType); }
 #ifdef USE_TEENSY3_I2C_LIB
-  bool begin(i2c_t3 &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false); //By default use Wire port
+  bool begin(i2c_t3 &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false, bool pollAndSetDeviceType = true); //By default use Wire port
 #else
-  bool begin(TwoWire &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false); //By default use Wire port
+  bool begin(TwoWire &wirePort = Wire, bool measBegin = true, bool autoCalibrate = true, bool skipStopPeriodicMeasurements = false, bool pollAndSetDeviceType = true); //By default use Wire port
 #endif
 
   void enableDebugging(Stream &debugPort = Serial); //Turn on debug printing. If user doesn't specify then Serial will be used
@@ -181,7 +184,8 @@ public:
 
   uint8_t computeCRC8(uint8_t data[], uint8_t len);
 
-  bool getSensorType(scd4x_sensor_type_e *sensorType, char *serialNumber); // Determine sensor type from serial number.
+  bool determineSensorType(scd4x_sensor_type_e *sensorType, char *serialNumber); // Determine sensor type from serial number.
+  scd4x_sensor_type_e getSensorType(); // Get the sensor type stored in the struct.
 
 private:
   //Variables
@@ -215,7 +219,9 @@ private:
   void convertASCIIToHex(const char *hexstr, uint16_t *integers);
 
   // Helper function to compare the serial number to known IDs.
-  uint16_t extractMaskedSensorType(uint16_t *serialNumberArray);
+  scd4x_sensor_type_e extractMaskedSensorType(uint16_t *serialNumberArray);
+
+  void setSensorType(scd4x_sensor_type_e sensorType); // Set the sensor type for the device.
 
   #if SCD4x_ENABLE_DEBUGLOG
   //Debug
