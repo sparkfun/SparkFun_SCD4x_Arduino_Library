@@ -30,9 +30,9 @@ SCD4x::SCD4x(scd4x_sensor_type_e sensorType)
 
 //Initialize the Serial port
 #ifdef USE_TEENSY3_I2C_LIB
-bool SCD4x::begin(i2c_t3 &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements)
+bool SCD4x::begin(i2c_t3 &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements, bool pollAndSetDeviceType)
 #else
-bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements)
+bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool skipStopPeriodicMeasurements, bool pollAndSetDeviceType)
 #endif
 {
   _i2cPort = &wirePort; //Grab which port the user wants us to use
@@ -57,6 +57,24 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
     _debugPort->println(serialNumber);
   }
   #endif // if SCD4x_ENABLE_DEBUGLOG
+
+  if (pollAndSetDeviceType == true)
+  {
+    scd4x_sensor_type_e* sensorType;
+    success &= determineSensorType(sensorType, serialNumber);
+    if (success == false)
+      return (false);
+    
+    setSensorType(*sensorType);
+
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true)
+    {
+      _debugPort->print(F("SCD40::begin: Sensor is of type SCD4"));
+      _debugPort->println(_sensorType);
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+  }
 
   if (autoCalibrate == true) // Must be done before periodic measurements are started
   {
@@ -856,6 +874,27 @@ char SCD4x::convertHexToASCII(uint8_t digit)
     return (char(digit + 0x41 - 10)); // Use upper case for A-F
 }
 
+void SCD4x::convertASCIIToHex(const char *hexstr, uint16_t *integers)
+{
+  for (int i = 0; i < 3; i++ ) {
+    uint16_t val = 0;
+    for (int j = 0; j < 4; j++ ) {
+      char c = hexstr[i * 4 + j];
+      val <<= 4;
+      if (c >= '0' && c <= '9') {
+        val += c - '0';
+      } 
+      else if (c >= 'A' && c <= 'F') {
+          val += c - 'A' + 10;
+      } 
+      else if (c >= 'a' && c <= 'f') {
+          val += c - 'a' + 10;
+      }
+    }
+    integers[i] = val;
+  }
+}
+
 //Perform self test. Takes 10 seconds to complete. See 3.9.3
 //The perform_self_test feature can be used as an end-of-line test to check sensor functionality
 //and the customer power supply to the sensor.
@@ -1024,6 +1063,135 @@ bool SCD4x::measureSingleShotRHTOnly(void)
   #endif // if SCD4x_ENABLE_DEBUGLOG
 
   return (success);
+}
+
+// Determine Sensor type from the serial number
+bool SCD4x::determineSensorType(scd4x_sensor_type_e *sensorType, char *serialNumber)
+{
+  bool success = true;
+
+  if(strlen(serialNumber) != 12)
+  {
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true) 
+    {
+      _debugPort->println(F("SCD40::getSensorType: S/N is not 13 bytes."));
+      _debugPort->print(F("SCD40::getSensorType: Num Bytes: "));
+      _debugPort->println(strlen(serialNumber));
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+    success = false;
+    return (success);
+  }
+  
+  uint16_t serNumInt[3];
+  convertASCIIToHex(serialNumber, serNumInt);
+
+  #if SCD4x_ENABLE_DEBUGLOG
+  if (_printDebug == true) 
+  {
+    _debugPort->print("SCD40::getSensorType: Word 1: ");
+    _debugPort->println(serNumInt[0], HEX);
+    _debugPort->print("SCD40::getSensorType: Word 2: ");
+    _debugPort->println(serNumInt[1], HEX);
+    _debugPort->print("SCD40::getSensorType: Word 3: ");
+    _debugPort->println(serNumInt[2], HEX);
+  }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+
+  *sensorType = extractMaskedSensorType(serNumInt);
+
+  if (*sensorType == SCD4x_SENSOR_INVALID)
+  {
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true)
+    {
+      _debugPort->println("SCD40::getSensorType: Invalid Sensor Type Determined.");
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+    *sensorType = SCD4x_SENSOR_SCD40; // Pick a default so we don't break things.
+    success = false;
+    return (success);
+  }
+
+  return (success);
+}
+
+scd4x_sensor_type_e SCD4x::getSensorType()
+{
+  return _sensorType;
+}
+
+void SCD4x::setSensorType(scd4x_sensor_type_e sensorType)
+{
+  _sensorType = sensorType;
+}
+
+// Extract the Sensor type (SCD40 vs SCD41) from the Serial Number of the connected device.
+scd4x_sensor_type_e SCD4x::extractMaskedSensorType(uint16_t *serialNumberArray)
+{
+  // Of the 48-bit serial number, the Type is identified by bits 24-37
+  // 0bxxxx'xxxx'xx11'1111'1111'1111'xxxx'xxxx'xxxx'xxxx'xxxx'xxxx
+  uint16_t masks[] = {0x003F, 0xFF00}; 
+
+  uint16_t maskedValues[2];
+  uint16_t combinedValue = 0;
+
+  for (int i = 0; i < 2; i++) {
+    maskedValues[i] = serialNumberArray[i] & masks[i];
+    #if SCD4x_ENABLE_DEBUGLOG
+    if(_printDebug == true) {
+      _debugPort->print("SCD40::extractMaskedSensorType: i: ");
+      _debugPort->println(i);
+      _debugPort->print("SCD40::extractMaskedSensorType: serialNumberArray[i]: ");
+      _debugPort->println(serialNumberArray[i], HEX);
+      _debugPort->print("SCD40::extractMaskedSensorType: masks[i]: ");
+      _debugPort->println(masks[i], HEX);
+      _debugPort->print("SCD40::extractMaskedSensorType: maskedValues[i]: ");
+      _debugPort->println(maskedValues[i], HEX);
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+  }
+
+  combinedValue = (maskedValues[0] << 8) | (maskedValues[1] >> 8);
+
+  #if SCD4x_ENABLE_DEBUGLOG
+  if (_printDebug == true) 
+  {
+    _debugPort->print("SCD40::extractMaskedSensorType: Combined Value: ");
+    _debugPort->println(combinedValue, HEX);
+  }
+  #endif // if SCD4x_ENABLE_DEBUGLOG
+
+  if (combinedValue == 0x376F)
+  {
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true) 
+    {
+      _debugPort->println("SCD40::extractMaskedSensorType: Picked SCD41");
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+    return SCD4x_SENSOR_SCD41;
+  }
+  else if (combinedValue == 0x2397) 
+  {
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true) 
+    {
+      _debugPort->println("SCD40::extractMaskedSensorType: Picked SCD40");
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+    return SCD4x_SENSOR_SCD40;
+  }
+  else 
+  {
+    #if SCD4x_ENABLE_DEBUGLOG
+    if (_printDebug == true) {
+      _debugPort->println("SCD40::extractMaskedSensorType: Something's seriously wrong here...");
+    }
+    #endif // if SCD4x_ENABLE_DEBUGLOG
+    return SCD4x_SENSOR_INVALID;
+  }
 }
 
 //Sends a command along with arguments and CRC
