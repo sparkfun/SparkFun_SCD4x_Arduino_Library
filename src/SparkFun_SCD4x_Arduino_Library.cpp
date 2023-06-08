@@ -47,8 +47,6 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
 
   char serialNumber[13]; // Serial number is 12 digits plus trailing NULL
   success &= getSerialNumber(serialNumber); // Read the serial number. Return false if the CRC check fails.
-  if (success == false)
-    return (false);
 
   #if SCD4x_ENABLE_DEBUGLOG
   if (_printDebug == true)
@@ -60,12 +58,10 @@ bool SCD4x::begin(TwoWire &wirePort, bool measBegin, bool autoCalibrate, bool sk
 
   if (pollAndSetDeviceType == true)
   {
-    scd4x_sensor_type_e* sensorType;
-    success &= determineSensorType(sensorType, serialNumber);
-    if (success == false)
-      return (false);
+    scd4x_sensor_type_e sensorType;
+    success &= determineSensorType(&sensorType, serialNumber);
     
-    setSensorType(*sensorType);
+    setSensorType(sensorType);
 
     #if SCD4x_ENABLE_DEBUGLOG
     if (_printDebug == true)

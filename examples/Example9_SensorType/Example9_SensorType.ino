@@ -47,7 +47,6 @@ void setup()
       ;
   }
 
-  scd4x_sensor_type_e* sensorType;
   char serialNumber[13];
   bool success = mySensor.getSerialNumber(serialNumber);
   Serial.print(F("Serial Number is: "));
