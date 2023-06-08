@@ -1,8 +1,21 @@
 # SparkFun SCD4x CO<sub>2</sub> Sensor Library
 
-[![SparkX SCD40 Breakout (Qwiic) (SPX-18365)](https://cdn.sparkfun.com//assets/parts/1/7/7/1/9/18365-Qwiic_SCD40-01.jpg)](https://www.sparkfun.com/products/18365)
-
-[*SparkX SCD40 Breakout (Qwiic) (SPX-18365)*](https://www.sparkfun.com/products/18365)
+<table class="table table-hover table-striped table-bordered">
+    <tr>
+        <th class="text-center">
+        </th>
+        <th class="text-center">
+        </th>
+    </tr>
+    <tr align="center">
+        <td><a href="https://www.sparkfun.com/products/22395"><img src="https://cdn.sparkfun.com/assets/parts/2/2/4/2/7/22395-_SEN_Qwiic_SCD40-_01.jpg" alt="SCD40"></a></td>
+        <td><a href="https://www.sparkfun.com/products/22396"><img src="https://cdn.sparkfun.com//assets/parts/2/2/4/2/8/22396-_SEN_Qwiic_SCD41-_01.jpg" alt="SCD41"></a></td>
+    </tr>
+    <tr align="center">
+        <td><a href="https://www.sparkfun.com/products/22395">SparkFun CO₂ Humidity and Temperature Sensor - SCD40 (Qwiic)</a></td>
+        <td><a href="https://www.sparkfun.com/products/22396">SparkFun CO₂ Humidity and Temperature Sensor - SCD41 (Qwiic)</a></td>
+    </tr>
+</table>
 
 The SCD4x is Sensirion's next generation miniature CO2 sensor. This sensor builds on the photoacoustic sensing principle and Sensirion's patented PAsens® and CMOSens® technology to offer high accuracy at an unmatched price and smallest form factor. On-chip signal compensation is realized with the built-in SHT4x humidity and temperature sensor.
 
@@ -22,6 +35,7 @@ Documentation
 --------------
 
 * **[Installing an Arduino Library Guide](https://learn.sparkfun.com/tutorials/installing-an-arduino-library)** - Basic information on how to install an Arduino library.
+* **[SCD4x Hookup Guide](https://sparkfun.github.io/SparkFun_Qwiic_CO2_Sensor_SCD4X)** -Basic hookup guide for the SparkFun Qwiic CO<sub>2</sub> Sensor - SCD4x.
 
 License Information
 -------------------
