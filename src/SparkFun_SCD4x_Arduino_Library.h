@@ -81,6 +81,7 @@
 #define SCD4x_COMMAND_PERFORM_SELF_TEST                       0x3639 // execution time: 10000ms
 #define SCD4x_COMMAND_PERFORM_FACTORY_RESET                   0x3632 // execution time: 1200ms
 #define SCD4x_COMMAND_REINIT                                  0x3646 // execution time: 20ms
+#define SCD4x_COMMAND_GET_FEATURE_SET_VERSION                 0x202F // execution time: 1ms
 
 //Low power single shot - SCD41 only
 #define SCD4x_COMMAND_MEASURE_SINGLE_SHOT                     0x219d // execution time: 5000ms
@@ -184,8 +185,9 @@ public:
 
   uint8_t computeCRC8(uint8_t data[], uint8_t len);
 
-  bool determineSensorType(scd4x_sensor_type_e *sensorType, char *serialNumber); // Determine sensor type from serial number.
-  scd4x_sensor_type_e getSensorType(); // Get the sensor type stored in the struct.
+  bool getFeatureSetVersion(scd4x_sensor_type_e* sensorType);
+  scd4x_sensor_type_e getSensorType(void); // Get the sensor type stored in the struct.
+  void setSensorType(scd4x_sensor_type_e sensorType); // Set the sensor type for the device.
 
 private:
   //Variables
@@ -214,14 +216,6 @@ private:
 
   //Convert serial number digit to ASCII
   char convertHexToASCII(uint8_t digit);
-
-  // Convert serial number string to hex digits.
-  void convertASCIIToHex(const char *hexstr, uint16_t *integers);
-
-  // Helper function to compare the serial number to known IDs.
-  scd4x_sensor_type_e extractMaskedSensorType(uint16_t *serialNumberArray);
-
-  void setSensorType(scd4x_sensor_type_e sensorType); // Set the sensor type for the device.
 
   #if SCD4x_ENABLE_DEBUGLOG
   //Debug

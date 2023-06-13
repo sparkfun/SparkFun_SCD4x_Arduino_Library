@@ -47,13 +47,10 @@ void setup()
       ;
   }
 
-  char serialNumber[13];
-  bool success = mySensor.getSerialNumber(serialNumber);
-  Serial.print(F("Serial Number is: "));
-  Serial.println(serialNumber);
-  
-  Serial.print(F("Getting the sensor type: SCD4"));
-  Serial.println(mySensor.getSensorType());
+  scd4x_sensor_type_e sensor;
+  bool success = mySensor.getFeatureSetVersion(&sensor);
+  Serial.print(F("Sensor determined to by of type: SCD4"));
+  Serial.println(sensor);
   
 }
 
